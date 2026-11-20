@@ -5,6 +5,8 @@ import * as THREE from 'three'
 import { localPlayer, send, useNetwork, type Player } from './network'
 import { blocked, furniture, walls } from './world'
 
+export type ViewMode = 'third-person' | 'first-person'
+
 function Avatar({ player, local = false }: { player: Player; local?: boolean }) {
   const group = useRef<THREE.Group>(null!)
   const body = useRef<THREE.Mesh>(null!)
@@ -40,14 +42,49 @@ function Avatar({ player, local = false }: { player: Player; local?: boolean }) 
   )
 }
 
-function Controller({ obstacles }: { obstacles: React.RefObject<THREE.Group | null> }) {
+function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.Group | null>; viewMode: ViewMode }) {
   const keys = useRef(new Set<string>())
   const elapsed = useRef(0)
-  const { camera } = useThree()
+  const look = useRef({ yaw: 0, pitch: 0 })
+  const { camera, gl } = useThree()
   const math = useRef({
     focus: new THREE.Vector3(), desired: new THREE.Vector3(), direction: new THREE.Vector3(),
     ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 5.5, 7),
   })
+  useEffect(() => {
+    keys.current.clear()
+    if (viewMode !== 'first-person') return
+    const canvas = gl.domElement
+    look.current = { yaw: localPlayer.rotation, pitch: 0 }
+    const lock = () => {
+      if (useNetwork.getState().status !== 'online' || document.pointerLockElement === canvas) return
+      // A denied request must not leave an unhandled promise rejection.
+      canvas.requestPointerLock()?.catch(() => {})
+    }
+    const mouse = (e: MouseEvent) => {
+      if (document.pointerLockElement !== canvas) return
+      look.current.yaw -= e.movementX * 0.002
+      look.current.pitch = THREE.MathUtils.clamp(look.current.pitch - e.movementY * 0.002, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05)
+    }
+    const clear = () => keys.current.clear()
+    const escape = (e: KeyboardEvent) => {
+      if (e.code === 'Escape' && document.pointerLockElement === canvas) {
+        clear()
+        document.exitPointerLock()
+      }
+    }
+    canvas.addEventListener('click', lock)
+    window.addEventListener('keydown', escape)
+    document.addEventListener('mousemove', mouse)
+    document.addEventListener('pointerlockchange', clear)
+    return () => {
+      canvas.removeEventListener('click', lock)
+      window.removeEventListener('keydown', escape)
+      document.removeEventListener('mousemove', mouse)
+      document.removeEventListener('pointerlockchange', clear)
+      if (document.pointerLockElement === canvas) document.exitPointerLock()
+    }
+  }, [viewMode, gl])
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, button, [contenteditable="true"]')) return
@@ -76,6 +113,16 @@ function Controller({ obstacles }: { obstacles: React.RefObject<THREE.Group | nu
     const k = keys.current
     let dx = Number(k.has('KeyD') || k.has('ArrowRight')) - Number(k.has('KeyA') || k.has('ArrowLeft'))
     let dz = Number(k.has('KeyS') || k.has('ArrowDown')) - Number(k.has('KeyW') || k.has('ArrowUp'))
+    if (viewMode === 'first-person') {
+      if (document.pointerLockElement !== gl.domElement) {
+        dx = 0
+        dz = 0
+      }
+      const { yaw } = look.current
+      const strafe = dx
+      dx = strafe * Math.cos(yaw) + dz * Math.sin(yaw)
+      dz = -strafe * Math.sin(yaw) + dz * Math.cos(yaw)
+    }
     const moving = Math.hypot(dx, dz)
     const online = useNetwork.getState().status === 'online'
     if (moving && online) {
@@ -85,8 +132,9 @@ function Controller({ obstacles }: { obstacles: React.RefObject<THREE.Group | nu
       const z = localPlayer.z + dz * 4 * dt
       if (!blocked(x, localPlayer.z)) localPlayer.x = x
       if (!blocked(localPlayer.x, z)) localPlayer.z = z
-      localPlayer.rotation = Math.atan2(-dx, -dz)
+      if (viewMode === 'third-person') localPlayer.rotation = Math.atan2(-dx, -dz)
     }
+    if (viewMode === 'first-person' && online) localPlayer.rotation = look.current.yaw
     localPlayer.animation = moving && online ? 'walk' : 'idle'
     elapsed.current += delta
     if (elapsed.current >= 0.05 && online) {
@@ -94,6 +142,11 @@ function Controller({ obstacles }: { obstacles: React.RefObject<THREE.Group | nu
       send({ type: 'move', ...localPlayer })
     }
 
+    if (viewMode === 'first-person') {
+      camera.position.set(localPlayer.x, 1.4, localPlayer.z)
+      camera.rotation.set(look.current.pitch, look.current.yaw, 0, 'YXZ')
+      return
+    }
     const { focus, desired, direction, ray, offset } = math.current
     focus.set(localPlayer.x, 1.1, localPlayer.z)
     desired.copy(focus).add(offset)
@@ -110,7 +163,7 @@ function Controller({ obstacles }: { obstacles: React.RefObject<THREE.Group | nu
   return null
 }
 
-function Scene() {
+function Scene({ viewMode }: { viewMode: ViewMode }) {
   const players = useNetwork(s => s.players)
   const id = useNetwork(s => s.id)
   const obstacles = useRef<THREE.Group>(null)
@@ -141,16 +194,17 @@ function Scene() {
           <meshStandardMaterial color="#243b50" emissive="#407a92" emissiveIntensity={0.35} />
         </mesh>
       ))}
-      <Controller obstacles={obstacles} />
-      {Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id} />)}
+      <Controller obstacles={obstacles} viewMode={viewMode} />
+      {Object.values(players).filter(p => viewMode !== 'first-person' || p.id !== id)
+        .map(p => <Avatar key={p.id} player={p} local={p.id === id} />)}
     </>
   )
 }
 
-export default function Office() {
+export default function Office({ viewMode }: { viewMode: ViewMode }) {
   return (
     <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 70 }}>
-      <Scene />
+      <Scene viewMode={viewMode} />
     </Canvas>
   )
 }

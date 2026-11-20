@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -132,6 +133,7 @@ func validMove(p *peer, m input, now time.Time) bool {
 
 func (h *hub) handle(c command, now time.Time) {
 	p, m := c.peer, c.input
+	fmt.Println("peer", c.peer.player)
 	if c.leave {
 		if h.peers[p] {
 			delete(h.peers, p)
@@ -157,6 +159,7 @@ func (h *hub) handle(c command, now time.Time) {
 		h.broadcast(map[string]any{"type": "join", "player": p.player})
 		return
 	}
+	fmt.Println("m.type", m.Type)
 	switch m.Type {
 	case "move":
 		if now.Sub(p.lastInput) < 30*time.Millisecond {
@@ -179,7 +182,8 @@ func (h *hub) handle(c command, now time.Time) {
 			return
 		}
 		p.lastChat = now
-		h.broadcast(map[string]any{
+
+		h.send(p, map[string]any{
 			"type": "chat", "id": p.player.ID, "name": p.player.Name,
 			"text": text, "at": now.UTC().Format(time.RFC3339),
 		})
@@ -298,7 +302,7 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	addr := os.Getenv("ADDR")
 	if addr == "" {
-		addr = ":8080"
+		addr = ":8081"
 	}
 	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

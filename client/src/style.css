@@ -5,6 +5,7 @@ main { height: 100dvh; min-height: 500px; position: relative; overflow: hidden; 
 button, input { font: inherit; }
 button { cursor: pointer; border: 1px solid #ffffff25; color: inherit; background: #ffffff0a; border-radius: 9px; padding: 9px 15px; }
 button:hover { background: #ffffff15; }
+button[aria-pressed="true"] { background: #65dfbb; color: #10271f; }
 button:disabled { opacity: .5; cursor: default; }
 input { width: 100%; min-width: 0; border: 1px solid #ffffff25; border-radius: 9px; background: #0d1723; color: #fff; padding: 12px; outline: none; }
 input:focus { border-color: #65dfbb; }

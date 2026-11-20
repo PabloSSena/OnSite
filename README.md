@@ -1,7 +1,7 @@
 # Office
 
 Our 3D office: React Three Fiber + Go + WebSocket. One room for up to 10 friends,
-box avatars, WASD/arrow-key movement, a third-person camera, AABB collision,
+box avatars, WASD/arrow-key movement, third-person and first-person cameras, AABB collision,
 floating name tags, and chat. No accounts, database, or required external services.
 
 ## Run it
@@ -12,15 +12,26 @@ Requires Docker Desktop with Linux containers.
 docker compose up --build -d
 ```
 
-Open **http://localhost:8080** in two tabs, join with different names, and move around.
+Open **http://localhost:8081** in two tabs, join with different names, and move around.
 Click outside the chat to use WASD again. `Leave` closes the connection.
+
+### Camera views
+
+The office starts in the original third-person view. After joining, toggle
+**First-person view** in the header to see through your avatar's eyes.
+Click the 3D scene to capture the mouse, then move the mouse to look around.
+WASD/arrow keys move relative to where you are looking, with the same speed and
+collision as third-person mode. Press **Escape** to release the mouse and use
+chat or switch views. Movement pauses while the mouse is released in first-person.
+Your own avatar/name tag is hidden only for you in first-person; friends still see you.
+Mouse capture requires a supported desktop browser on localhost or HTTPS.
 
 ```sh
 docker compose logs -f
 docker compose down
 ```
 
-For friends on the same network: `http://HOST-IP:8080` (allow the port through your firewall).
+For friends on the same network: `http://HOST-IP:8081` (allow the port through your firewall).
 This prototype is for trusted environments: anyone who can reach the address can join.
 For internet access, configure HTTPS with Caddy and access control.
 No microphone is needed at this stage.
@@ -43,8 +54,8 @@ npm ci
 npm run dev
 ```
 
-Open **http://localhost:5173**. Vite proxies `/ws` to Go on `:8080`.
-Without Go installed: `docker compose run --rm --build -p 8080:8080 server`.
+Open **http://localhost:5173**. Vite proxies `/ws` to Go on `:8081`.
+Without Go installed: `docker compose run --rm --build -p 8081:8081 server`.
 Stop the full Compose stack first to avoid a port conflict.
 
 ## Checks
@@ -56,7 +67,7 @@ npm run build
 npm run smoke
 ```
 
-The smoke test requires Compose running on `:8080`, with no other users in the room.
+The smoke test requires Compose running on `:8081`, with no other users in the room.
 It uses Node's native WebSocket and tests two real clients through nginx:
 movement, chat, leaving, and a new connection. It does not test WebGL or the camera.
 
@@ -86,6 +97,9 @@ Manual checklist:
 - Two tabs, two names; movement appears in the other tab.
 - Diagonal movement is not faster. Desks/walls block movement; corners allow sliding.
 - The camera moves closer near walls; typing in chat does not move the avatar.
+- Toggle first-person, click the scene, look up/down and turn; movement follows
+  the horizontal view direction. Escape releases the mouse for chat; switching
+  back restores the third-person avatar and controls.
 - Chat appears in both tabs; closing one removes its avatar.
 - Restarting the server reconnects players and resets them to spawn.
 - Check smoothness/FPS on a low-end laptop; controls require a keyboard, not touch.
@@ -100,7 +114,9 @@ Manual checklist:
 - **Immediate local movement.** Networking does not block WASD; remote avatars interpolate.
   The server runs sanity checks, not physics. Local AABB collision avoids Rapier for now.
 - **Fixed camera behind/above, without orbit.** Predictable WASD directions; a raycast
-  moves the camera closer when it hits an obstacle. Next: test corners and the near plane.
+  moves the camera closer when it hits an obstacle. Optional first-person uses
+  pointer-lock mouse look at eye height and horizontal camera-relative movement.
+  Both views share collision and networking; no protocol changes are needed.
 - **Zustand only for network/UI state.** Per-frame transforms use refs.
 - **Same-origin proxy.** The same code works with Vite and nginx, without CORS.
 - **No persistence.** Restarting clears the room/chat. Reconnecting assigns a new ID.

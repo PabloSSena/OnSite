@@ -3,14 +3,14 @@ services:
     build:
       context: ./server
     environment:
-      ADDR: ":8080"
+      ADDR: ":8081"
     restart: unless-stopped
     stop_grace_period: 10s
   client:
     build:
       context: ./client
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
       - server
     restart: unless-stopped

@@ -53,6 +53,7 @@ export function connect(name: string): () => void {
       if (stopped) return
       let msg: ServerMessage
       try { msg = JSON.parse(event.data) as ServerMessage } catch { return }
+      console.log('heyy', msg.type)
       switch (msg.type) {
         case 'welcome': {
           attempt = 0

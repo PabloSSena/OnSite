@@ -9,5 +9,5 @@ FROM alpine:3.23
 RUN apk add --no-cache ca-certificates && adduser -D -u 10001 app
 USER app
 COPY --from=build /office /office
-EXPOSE 8080
+EXPOSE 8081
 ENTRYPOINT ["/office"]

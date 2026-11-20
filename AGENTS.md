@@ -28,7 +28,7 @@ or libraries unless the task calls for them.
 - Backend: `cd server && go test -race ./... && go vet ./...`
 - Integration: `docker compose up --build -d`, then `cd client && npm run smoke`
 - Browser: in `client/`, run `npx playwright install chromium` and `npm run test:e2e`.
-- Manual: two tabs at http://localhost:8080; movement, collision, chat, leaving, and reconnection.
+- Manual: two tabs at http://localhost:8081; movement, collision, chat, leaving, and reconnection.
 - Record exactly what passed and what remains unverified.
 
 ## Task completion
