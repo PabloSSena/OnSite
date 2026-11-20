@@ -16,7 +16,7 @@ func TestMovementBoundary(t *testing.T) {
 	}{
 		{"walking", input{X: 0.2}, true},
 		{"teleport", input{X: 4}, false},
-		{"outside", input{Z: 10}, false},
+		{"outside", input{Z: 24}, false},
 		{"non finite", input{X: math.NaN()}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -28,6 +28,24 @@ func TestMovementBoundary(t *testing.T) {
 	p.lastMove = now.Add(-time.Hour)
 	if validMove(p, input{X: 8}, now) {
 		t.Fatal("idle time must not permit teleport")
+	}
+}
+
+func TestGardenMovementBoundary(t *testing.T) {
+	now := time.Now()
+	p := &peer{lastMove: now.Add(-50 * time.Millisecond), player: player{X: 23.3, Z: 15}}
+	if !validMove(p, input{X: 23.5, Z: 15}, now) {
+		t.Fatal("walking inside the expanded garden bounds should be allowed")
+	}
+	if validMove(p, input{X: 23.51, Z: 15}, now) {
+		t.Fatal("walking outside the expanded garden bounds should be rejected")
+	}
+	p.player.X = -23.3
+	if !validMove(p, input{X: -23.5, Z: 15}, now) {
+		t.Fatal("negative garden boundary should be allowed")
+	}
+	if validMove(p, input{X: -23.51, Z: 15}, now) {
+		t.Fatal("negative garden boundary should be enforced")
 	}
 }
 

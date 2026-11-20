@@ -18,13 +18,16 @@ Server → client:
 - `correction`: `player` (accepted position after an invalid movement).
 
 `Player`: `{id, name, color, x, z, rotation, animation}`.
-Spawn: `(0, 6)`. Y is height; avatars face -Z.
+Spawn: `(0, 6)`, on the porch outside the office. Y is height; avatars face -Z.
+Map bounds: `-23.5 <= x, z <= 23.5` (checked by both client and server).
+The office occupies x `[-16, 16]`, z `[-16, 4]`; a four-unit-wide open entrance
+at x `[-2, 2]`, z `4` connects its central hallway to the garden courtyard.
 Snapshots replace the remote player map. Local movement is immediate; remote
 avatars use exponential position smoothing and rotation slerp. There is no
 timestamped snapshot buffer yet; adding one is a useful exercise for handling jitter.
 
 The server checks map bounds, speed with tolerance, and finite values.
-Furniture collision is client-only; this is **not** an authoritative simulation.
+Wall and furniture collision is client-only; this is **not** an authoritative simulation.
 Chat uses connection identity and renders text through React, never HTML.
 The outgoing queue is bounded: slow clients are disconnected without blocking the hub.
 Ping every 20s, 5s timeout. Reconnection creates a new identity and resets to spawn.

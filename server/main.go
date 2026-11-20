@@ -122,7 +122,7 @@ func validMove(p *peer, m input, now time.Time) bool {
 		math.IsInf(m.X, 0) || math.IsInf(m.Z, 0) || math.IsInf(m.Rotation, 0) {
 		return false
 	}
-	if math.Abs(m.X) > 9.5 || math.Abs(m.Z) > 9.5 || math.Abs(m.Rotation) > math.Pi*2 {
+	if math.Abs(m.X) > 23.5 || math.Abs(m.Z) > 23.5 || math.Abs(m.Rotation) > math.Pi*2 {
 		return false
 	}
 	// Allow for jitter, but cap elapsed time to prevent teleporting after idling.

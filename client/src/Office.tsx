@@ -3,7 +3,8 @@ import { Html } from '@react-three/drei'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { localPlayer, send, useNetwork, type Player } from './network'
-import { blocked, furniture, walls } from './world'
+import { blocked } from './world'
+import { OfficeWorld } from './OfficeWorld'
 
 function Avatar({ player, local = false }: { player: Player; local?: boolean }) {
   const group = useRef<THREE.Group>(null!)
@@ -46,7 +47,7 @@ function Controller({ obstacles }: { obstacles: React.RefObject<THREE.Group | nu
   const { camera } = useThree()
   const math = useRef({
     focus: new THREE.Vector3(), desired: new THREE.Vector3(), direction: new THREE.Vector3(),
-    ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 5.5, 7),
+    ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 8, 10),
   })
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -116,31 +117,13 @@ function Scene() {
   const obstacles = useRef<THREE.Group>(null)
   return (
     <>
-      <color attach="background" args={['#c6d8df']} />
-      <fog attach="fog" args={['#c6d8df', 25, 55]} />
-      <ambientLight intensity={1.5} />
-      <directionalLight position={[3, 12, 5]} intensity={2.2} castShadow
-        shadow-mapSize={[1024, 1024]} shadow-camera-left={-12} shadow-camera-right={12}
-        shadow-camera-top={12} shadow-camera-bottom={-12} shadow-normalBias={0.04} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[20, 20]} />
-        <meshStandardMaterial color="#e1e7e5" />
-      </mesh>
-      <gridHelper args={[20, 20, '#b6c8ca', '#ced9d7']} position={[0, 0.01, 0]} />
-      <group ref={obstacles}>
-        {[...walls, ...furniture].map((b, i) => (
-          <mesh key={i} position={b.position} castShadow receiveShadow>
-            <boxGeometry args={b.size} />
-            <meshStandardMaterial color={b.color} />
-          </mesh>
-        ))}
-      </group>
-      {furniture.slice(0, 4).map((b, i) => (
-        <mesh key={i} position={[b.position[0], 1.45, b.position[2] - 0.25]}>
-          <boxGeometry args={[0.9, 0.6, 0.08]} />
-          <meshStandardMaterial color="#243b50" emissive="#407a92" emissiveIntensity={0.35} />
-        </mesh>
-      ))}
+      <color attach="background" args={['#dce5d5']} />
+      <fog attach="fog" args={['#dce5d5', 40, 85]} />
+      <hemisphereLight args={['#fff4da', '#708565', 2]} />
+      <directionalLight position={[-12, 24, 10]} intensity={2.4} color="#fff0d5" castShadow
+        shadow-mapSize={[2048, 2048]} shadow-camera-left={-30} shadow-camera-right={30}
+        shadow-camera-top={30} shadow-camera-bottom={-30} shadow-camera-far={80} shadow-normalBias={0.04} />
+      <OfficeWorld obstacles={obstacles} />
       <Controller obstacles={obstacles} />
       {Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id} />)}
     </>
@@ -149,7 +132,7 @@ function Scene() {
 
 export default function Office() {
   return (
-    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 70 }}>
+    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 100 }}>
       <Scene />
     </Canvas>
   )
