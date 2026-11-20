@@ -114,7 +114,8 @@ rendering and landing collision aligned. The source worktree remains unchanged.
 - Backend race tests and vet: passed using Go 1.26 Docker containers.
 - Isolated Compose build/start and network smoke: passed, including room chat,
   leaving, and reconnecting.
-- GIF and webcam browser tests plus the combined voice/camera test: four passed
-  against the merged stack. The complete regression suite is running separately.
+- Complete Playwright regression suite against the isolated merged stack:
+  **24 passed** in 11.2 minutes, covering actions, animation, mirrors, GIFs,
+  room chat, furniture landings, voice, webcams, combined media, and world navigation.
 - Physical-GPU performance, real camera/microphone quality, cross-network/TURN
   connectivity, and a manual two-device session remain unverified.
