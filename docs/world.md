@@ -96,11 +96,11 @@ latency carrying the player past the thin screen.
 
 ## Integrating alongside other agents
 
-This work does not modify `App.tsx`, `network.ts`, styles, or avatar rendering.
-Keep other agents' controller and camera-mode changes when merging
-`Office.tsx`; the world-related changes are its imports, camera offset, lighting,
-scene geometry, and camera far plane. The backend change is just the map-bound
-constant in `validMove`; preserve unrelated backend edits.
+The source world branch did not modify `App.tsx`, `network.ts`, styles, or avatar
+rendering. It is now merged into `updates`, preserving first-person controls,
+articulated avatars, jump/punch physics, GIFs, voice, and cameras. The mirror is
+mounted at the north end of the hallway. Shared screen geometry keeps monitor
+rendering and landing collision aligned. The source worktree remains unchanged.
 
 ## Integration validation
 
@@ -109,6 +109,12 @@ constant in `validMove`; preserve unrelated backend edits.
 - The three pure tests in `tests/physics.spec.ts`: passed, covering desktop and
   monitor landings, walking off, bench/planter landings, walls as support,
   jumpable fences, absolute map bounds, thin-surface sweeps, and no mid-air jump.
-- Updated browser tests have not been run against the merged stack. Frontend
-  check/build, backend checks, smoke, screenshots, physical-GPU performance,
-  and a manual two-person session remain unverified for this integration.
+- Frontend dependency install, type check, and build: passed (Vite retains its
+  large-bundle warning).
+- Backend race tests and vet: passed using Go 1.26 Docker containers.
+- Isolated Compose build/start and network smoke: passed, including room chat,
+  leaving, and reconnecting.
+- GIF and webcam browser tests plus the combined voice/camera test: four passed
+  against the merged stack. The complete regression suite is running separately.
+- Physical-GPU performance, real camera/microphone quality, cross-network/TURN
+  connectivity, and a manual two-device session remain unverified.
