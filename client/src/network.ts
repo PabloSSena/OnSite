@@ -8,9 +8,17 @@ export type Player = {
   z: number
   rotation: number
   animation: 'idle' | 'walk'
+  camera: boolean
+}
+export type VideoSignal = { type: 'signal'; from: string; session: string; kind: 'offer' | 'answer'; sdp: string }
+const signalListeners = new Set<(signal: VideoSignal) => void>()
+export function onVideoSignal(listener: (signal: VideoSignal) => void) {
+  signalListeners.add(listener)
+  return () => { signalListeners.delete(listener) }
 }
 export type Chat = { id: string; name: string; text: string; at: string }
 type ServerMessage =
+  | VideoSignal
   | { type: 'welcome'; id: string; players: Player[] }
   | { type: 'snapshot'; players: Player[] }
   | { type: 'join'; player: Player }
@@ -54,6 +62,9 @@ export function connect(name: string): () => void {
       let msg: ServerMessage
       try { msg = JSON.parse(event.data) as ServerMessage } catch { return }
       switch (msg.type) {
+        case 'signal':
+          signalListeners.forEach(listener => listener(msg))
+          break
         case 'welcome': {
           attempt = 0
           const me = msg.players.find(p => p.id === msg.id)

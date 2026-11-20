@@ -29,6 +29,7 @@ type player struct {
 	Z         float64 `json:"z"`
 	Rotation  float64 `json:"rotation"`
 	Animation string  `json:"animation"`
+	Camera    bool    `json:"camera"`
 }
 
 type input struct {
@@ -39,18 +40,25 @@ type input struct {
 	Rotation  float64 `json:"rotation"`
 	Animation string  `json:"animation"`
 	Text      string  `json:"text"`
+	Enabled   bool    `json:"enabled"`
+	To        string  `json:"to"`
+	Session   string  `json:"session"`
+	Kind      string  `json:"kind"`
+	SDP       string  `json:"sdp"`
 }
 
 type peer struct {
-	conn      *websocket.Conn
-	send      chan []byte
-	done      chan struct{}
-	once      sync.Once
-	player    player
-	lastMove  time.Time
-	lastChat  time.Time
-	lastInput time.Time
-	joined    bool
+	conn        *websocket.Conn
+	send        chan []byte
+	done        chan struct{}
+	once        sync.Once
+	player      player
+	lastMove    time.Time
+	lastChat    time.Time
+	lastInput   time.Time
+	signalStart time.Time
+	signalCount int
+	joined      bool
 }
 
 func (p *peer) stop() {
@@ -158,6 +166,32 @@ func (h *hub) handle(c command, now time.Time) {
 		return
 	}
 	switch m.Type {
+	case "camera":
+		if p.player.Camera != m.Enabled {
+			p.player.Camera = m.Enabled
+			h.broadcast(map[string]any{"type": "snapshot", "players": h.players()})
+		}
+	case "signal":
+		// Only relay bounded SDP to another joined player. Identity is server-owned.
+		if now.Sub(p.signalStart) >= time.Second {
+			p.signalStart, p.signalCount = now, 0
+		}
+		p.signalCount++
+		if p.signalCount > 40 || len(m.Session) == 0 || len(m.Session) > 64 ||
+			len(m.SDP) == 0 || len(m.SDP) > 16384 ||
+			(m.Kind != "offer" && m.Kind != "answer") {
+			return
+		}
+		for target := range h.peers {
+			if target != p && target.player.ID == m.To &&
+				((m.Kind == "offer" && p.player.Camera) || (m.Kind == "answer" && target.player.Camera)) {
+				h.send(target, map[string]any{
+					"type": "signal", "from": p.player.ID, "session": m.Session,
+					"kind": m.Kind, "sdp": m.SDP,
+				})
+				break
+			}
+		}
 	case "move":
 		if now.Sub(p.lastInput) < 30*time.Millisecond {
 			return
@@ -213,7 +247,7 @@ func (h *hub) serve(ctx context.Context, w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return
 	}
-	conn.SetReadLimit(2048)
+	conn.SetReadLimit(20 * 1024)
 	id := make([]byte, 8)
 	if _, err := rand.Read(id); err != nil {
 		conn.CloseNow()

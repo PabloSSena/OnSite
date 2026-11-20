@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Office from './Office'
+import Webcams from './Webcams'
 import { connect, send, useNetwork } from './network'
 
 const labels = { offline: 'Offline', connecting: 'Connecting…', online: 'Live', reconnecting: 'Reconnecting… (room may be full)' }
@@ -37,9 +38,10 @@ export default function App() {
       <header className="hud">
         <div><strong><span className="brand-dot" /> office</strong><span className="subtitle">Close, even from afar.</span></div>
         <div className="presence"><span className={status === 'online' ? 'live' : ''}>●</span> {labels[status]} <span className="count">{Object.keys(players).length}/10 people</span></div>
-        {joined && <button onClick={() => setJoined(true)}>Leave</button>}
+        {joined && <button onClick={() => setJoined(false)}>Leave</button>}
       </header>
       <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move <span>·</span> Click the chat to talk</div>
+      {joined && <Webcams />}
       {!joined ? (
         <div className="overlay">
           <form className="join panel" onSubmit={enter}>
@@ -49,7 +51,7 @@ export default function App() {
             <label htmlFor="name">What should we call you?</label>
             <input id="name" autoFocus maxLength={24} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" required />
             <button className="primary" type="submit">Join the office →</button>
-            <small>Prototype • movement + chat • voice comes later</small>
+            <small>Movement + chat + optional webcam • no audio</small>
           </form>
         </div>
       ) : (
