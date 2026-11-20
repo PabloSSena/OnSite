@@ -111,6 +111,17 @@ docker compose up --build -d
 Open **http://localhost:8082**. Set `$env:OFFICE_URL = 'http://localhost:8082'`
 before running smoke/browser checks against that instance.
 
+### GIF reactions
+
+Paste a direct HTTPS `.gif` link into **GIF link** and press **GIF** to show an
+animated reaction above your avatar for 8 seconds, visible to everyone currently
+connected. Supported media hosts: Tenor, GIPHY, and Discord (see the
+[protocol](docs/protocol.md) for the exact allowlist). Use **Copy image address**,
+not a GIF share-page URL. No API key is needed.
+Reactions are limited to one every 2 seconds and replace your previous GIF.
+Images load from the external host, which receives viewers' IP addresses.
+Expired/broken links show “GIF unavailable”; no uploads or link scraping are provided.
+
 ```sh
 docker compose logs -f
 docker compose down

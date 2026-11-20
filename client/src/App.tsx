@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Office, { type ViewMode } from './Office'
 import { connect, send, useNetwork } from './network'
 import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
+import { validGIFURL } from './gif'
 
 const labels = { offline: 'Offline', connecting: 'Connecting…', online: 'Live', reconnecting: 'Reconnecting… (room may be full)' }
 
@@ -10,11 +11,19 @@ export default function App() {
   const [joined, setJoined] = useState(false)
   const [text, setText] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('first-person')
+  const [gifURL, setGifURL] = useState('')
+  const [gifError, setGifError] = useState('')
+  const [gifCooldown, setGifCooldown] = useState(false)
   const { status, players, chats } = useNetwork()
   const voice = useVoice()
   const log = useRef<HTMLDivElement>(null)
 
 
+  useEffect(() => {
+    if (!gifCooldown) return
+    const timer = setTimeout(() => setGifCooldown(false), 2000)
+    return () => clearTimeout(timer)
+  }, [gifCooldown])
   useEffect(() => {
     if (joined) return connect(name)
   }, [joined, name])
@@ -37,7 +46,19 @@ export default function App() {
     send({ type: 'chat', text: text.trim() })
     setText('')
   }
-
+  function shareGIF(e: FormEvent) {
+    e.preventDefault()
+    if (status !== 'online' || gifCooldown) return
+    const url = gifURL.trim()
+    if (!validGIFURL(url)) {
+      setGifError('Use a direct HTTPS .gif link from Tenor, GIPHY, or Discord—not a share page.')
+      return
+    }
+    send({ type: 'gif', url })
+    setGifCooldown(true)
+    setGifURL('')
+    setGifError('')
+  }
   return (
     <main>
       <Office viewMode={viewMode} />
@@ -90,6 +111,14 @@ export default function App() {
             <input aria-label="Message" maxLength={300} value={text} onChange={e => setText(e.target.value)} placeholder="Say hello… (Enter to send)" disabled={status !== 'online'} />
             <button type="submit" disabled={status !== 'online' || !text.trim()} aria-label="Send message">↑</button>
           </form>
+          <form onSubmit={shareGIF} aria-label="GIF reaction">
+            <input aria-label="GIF link" aria-describedby="gif-help" maxLength={1500}
+              value={gifURL} onChange={e => { setGifURL(e.target.value); setGifError('') }}
+              placeholder="Paste a direct .gif link…" disabled={status !== 'online'} />
+            <button type="submit" disabled={status !== 'online' || gifCooldown || !gifURL.trim()}>GIF</button>
+          </form>
+          <p id="gif-help" className="gif-help">Shows above your head for 8 seconds. External images load for everyone.</p>
+          {gifError && <p className="gif-error" role="alert">{gifError}</p>}
         </section>
       )}
     </main>

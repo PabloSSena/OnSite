@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -45,6 +46,7 @@ type input struct {
 	Rotation  float64         `json:"rotation"`
 	Animation string          `json:"animation"`
 	Text      string          `json:"text"`
+	URL       string          `json:"url"`
 	Enabled   *bool           `json:"enabled"`
 	To        string          `json:"to"`
 	Kind      string          `json:"kind"`
@@ -59,6 +61,7 @@ type peer struct {
 	player       player
 	lastMove     time.Time
 	lastChat     time.Time
+	lastGIF      time.Time
 	lastInput    time.Time
 	joined       bool
 	signalWindow time.Time
@@ -189,6 +192,25 @@ func validSignal(kind string, data json.RawMessage) bool {
 	return true
 }
 
+// Only direct media links are accepted. The server never fetches the URL.
+func validGIFURL(value string) bool {
+	if len(value) > 1500 || strings.TrimSpace(value) != value {
+		return false
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.User != nil || (u.Port() != "" && u.Port() != "443") || u.Fragment != "" ||
+		!strings.HasSuffix(strings.ToLower(u.Path), ".gif") {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "media.tenor.com", "media.giphy.com", "i.giphy.com",
+		"media0.giphy.com", "media1.giphy.com", "media2.giphy.com",
+		"media3.giphy.com", "media4.giphy.com", "cdn.discordapp.com", "media.discordapp.net":
+		return true
+	}
+	return false
+}
+
 func (h *hub) handle(c command, now time.Time) {
 	p, m := c.peer, c.input
 	fmt.Println("peer", c.peer.player)
@@ -243,6 +265,12 @@ func (h *hub) handle(c command, now time.Time) {
 				break
 			}
 		}
+	case "gif":
+		if !validGIFURL(m.URL) || now.Sub(p.lastGIF) < 2*time.Second {
+			return
+		}
+		p.lastGIF = now
+		h.broadcast(map[string]any{"type": "gif", "id": p.player.ID, "url": m.URL})
 	case "move":
 		if now.Sub(p.lastInput) < 30*time.Millisecond {
 			return
@@ -265,7 +293,7 @@ func (h *hub) handle(c command, now time.Time) {
 			return
 		}
 		p.lastChat = now
-		h.send(p, map[string]any{
+		h.broadcast(map[string]any{
 			"type": "chat", "id": p.player.ID, "name": p.player.Name,
 			"text": text, "at": now.UTC().Format(time.RFC3339),
 		})

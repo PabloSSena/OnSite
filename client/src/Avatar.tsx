@@ -5,6 +5,7 @@ import * as THREE from 'three'
 import { advanceMotion, createMotion, footTarget, legPose, punchExtension } from './avatarMotion'
 import { localPlayer, useNetwork, type Player } from './network'
 import { supported } from './world'
+import GIFBubble from './GIFBubble'
 
 const skin = '#efc9a9'
 const ink = '#25333e'
@@ -12,6 +13,7 @@ const ink = '#25333e'
 export default function Avatar({ player, local = false, firstPerson = false }: {
   player: Player; local?: boolean; firstPerson?: boolean
 }) {
+  const reaction = useNetwork(s => s.gifs[player.id])
   const root = useRef<THREE.Group>(null!)
   const hips = useRef<THREE.Group>(null!)
   const torso = useRef<THREE.Group>(null!)
@@ -187,6 +189,7 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
       {!firstPerson && <Html position={[0, 1.85, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
         <span className={`nametag ${local ? 'me' : ''}`}>{player.name}{local ? ' (you)' : ''}</span>
       </Html>}
+      {reaction && <GIFBubble key={reaction.receivedAt} reaction={reaction} name={player.name} />}
     </group>
   )
 }
