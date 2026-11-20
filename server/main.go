@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -190,6 +191,7 @@ func validSignal(kind string, data json.RawMessage) bool {
 
 func (h *hub) handle(c command, now time.Time) {
 	p, m := c.peer, c.input
+	fmt.Println("peer", c.peer.player)
 	if c.leave {
 		if h.peers[p] {
 			delete(h.peers, p)
@@ -219,6 +221,7 @@ func (h *hub) handle(c command, now time.Time) {
 	if !h.peers[p] {
 		return
 	}
+	fmt.Println("m.type", m.Type)
 	switch m.Type {
 	case "voice":
 		if m.Enabled != nil {
