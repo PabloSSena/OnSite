@@ -34,6 +34,7 @@ type player struct {
 	Rotation  float64 `json:"rotation"`
 	Animation string  `json:"animation"`
 	Voice     bool    `json:"voice"`
+	Camera    bool    `json:"camera"`
 }
 
 type input struct {
@@ -51,21 +52,25 @@ type input struct {
 	To        string          `json:"to"`
 	Kind      string          `json:"kind"`
 	Data      json.RawMessage `json:"data"`
+	Session   string          `json:"session"`
+	SDP       string          `json:"sdp"`
 }
 
 type peer struct {
-	conn         *websocket.Conn
-	send         chan []byte
-	done         chan struct{}
-	once         sync.Once
-	player       player
-	lastMove     time.Time
-	lastChat     time.Time
-	lastGIF      time.Time
-	lastInput    time.Time
-	joined       bool
-	signalWindow time.Time
-	signalCount  int
+	conn              *websocket.Conn
+	send              chan []byte
+	done              chan struct{}
+	once              sync.Once
+	player            player
+	lastMove          time.Time
+	lastChat          time.Time
+	lastGIF           time.Time
+	lastInput         time.Time
+	joined            bool
+	signalWindow      time.Time
+	signalCount       int
+	cameraSignalStart time.Time
+	cameraSignalCount int
 }
 
 func (p *peer) stop() {
@@ -232,6 +237,7 @@ func (h *hub) handle(c command, now time.Time) {
 		}
 		p.player.Animation = "idle"
 		p.player.Voice = false
+		p.player.Camera = false
 		p.player.Z = 6
 		p.lastMove = now
 		p.joined = true
@@ -261,6 +267,32 @@ func (h *hub) handle(c command, now time.Time) {
 			if target.player.ID == m.To && target.player.Voice {
 				h.send(target, map[string]any{
 					"type": "signal", "from": p.player.ID, "kind": m.Kind, "data": m.Data,
+				})
+				break
+			}
+		}
+	case "camera":
+		if m.Enabled != nil && p.player.Camera != *m.Enabled {
+			p.player.Camera = *m.Enabled
+			h.broadcast(map[string]any{"type": "snapshot", "players": h.players()})
+		}
+	case "camera-signal":
+		// Only relay bounded SDP to another joined player. Identity is server-owned.
+		if now.Sub(p.cameraSignalStart) >= time.Second {
+			p.cameraSignalStart, p.cameraSignalCount = now, 0
+		}
+		p.cameraSignalCount++
+		if p.cameraSignalCount > 40 || len(m.Session) == 0 || len(m.Session) > 64 ||
+			len(m.SDP) == 0 || len(m.SDP) > 16384 ||
+			(m.Kind != "offer" && m.Kind != "answer") {
+			return
+		}
+		for target := range h.peers {
+			if target != p && target.player.ID == m.To &&
+				((m.Kind == "offer" && p.player.Camera) || (m.Kind == "answer" && target.player.Camera)) {
+				h.send(target, map[string]any{
+					"type": "camera-signal", "from": p.player.ID, "session": m.Session,
+					"kind": m.Kind, "sdp": m.SDP,
 				})
 				break
 			}

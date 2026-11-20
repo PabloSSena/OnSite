@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import Office, { type ViewMode } from './Office'
+import Webcams from './Webcams'
 import { connect, send, useNetwork } from './network'
 import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
 import { validGIFURL } from './gif'
@@ -68,7 +69,8 @@ export default function App() {
         {joined && <button aria-pressed={viewMode === 'first-person'} onClick={() => setViewMode(viewMode === 'third-person' ? 'first-person' : 'third-person')}>First-person view</button>}
         {joined && <button onClick={() => setJoined(false)}>Leave</button>}
       </header>
-      {joined && <section className="voice panel" aria-label="Voice chat">
+      {joined && <aside className="media-panel" aria-label="Room media">
+      <section className="voice panel" aria-label="Voice chat">
         <div className="voice-status" role="status">{voice.status === 'off' ? 'Voice: off'
           : voice.status === 'requesting' ? 'Requesting microphone…'
             : `Voice: ${voice.connected} connected · ${voice.muted ? 'Mic muted' : 'Mic on'}`}</div>
@@ -84,7 +86,9 @@ export default function App() {
           {voice.playbackBlocked && <button onClick={() => void enableVoicePlayback()}>Enable sound</button>}
         </div>
         {voice.error && <p className="voice-error" role="alert">{voice.error}</p>}
-      </section>}
+      </section>
+      <Webcams />
+      </aside>}
       <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span>·</span>
         <kbd>Space</kbd> Jump <span>·</span> <kbd>F</kbd> / Left click Punch<br />
         {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse / chat' : 'Click the scene to play · Click the chat to talk'}</div>
@@ -97,7 +101,7 @@ export default function App() {
             <label htmlFor="name">What should we call you?</label>
             <input id="name" autoFocus maxLength={24} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" required />
             <button className="primary" type="submit">Join the office →</button>
-            <small>Movement + chat + opt-in voice • headphones recommended</small>
+            <small>Movement + GIFs + opt-in voice and camera • headphones recommended</small>
           </form>
         </div>
       ) : (

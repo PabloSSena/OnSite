@@ -12,6 +12,13 @@ export type Player = {
   rotation: number
   animation: 'idle' | 'walk'
   voice: boolean
+  camera: boolean
+}
+export type VideoSignal = { type: 'camera-signal'; from: string; session: string; kind: 'offer' | 'answer'; sdp: string }
+const videoSignalListeners = new Set<(signal: VideoSignal) => void>()
+export function onVideoSignal(listener: (signal: VideoSignal) => void) {
+  videoSignalListeners.add(listener)
+  return () => { videoSignalListeners.delete(listener) }
 }
 export type Chat = { id: string; name: string; text: string; at: string }
 export type VoiceSignal =
@@ -25,6 +32,7 @@ export function subscribeSignals(listener: (signal: VoiceSignal) => void): () =>
 export type GIFReaction = { url: string; receivedAt: number }
 type ServerMessage =
   | VoiceSignal
+  | VideoSignal
   | { type: 'welcome'; id: string; players: Player[] }
   | { type: 'snapshot'; players: Player[] }
   | { type: 'join'; player: Player }
@@ -71,6 +79,9 @@ export function connect(name: string): () => void {
       try { msg = JSON.parse(event.data) as ServerMessage } catch { return }
       console.log('heyy', msg.type)
       switch (msg.type) {
+        case 'camera-signal':
+          videoSignalListeners.forEach(listener => listener(msg))
+          break
         case 'signal':
           signalListeners.forEach(listener => listener(msg))
           break

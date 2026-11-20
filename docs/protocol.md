@@ -15,6 +15,11 @@ Client → server:
   Allowed hosts: `media.tenor.com`, `media.giphy.com`, `i.giphy.com`,
   `media0.giphy.com` through `media4.giphy.com`, `cdn.discordapp.com`, `media.discordapp.net`.
   Credentials, fragments, and nonstandard ports are rejected. Invalid/rate-limited inputs are ignored.
+- `camera`: `enabled` (boolean). Off by default; changes trigger an immediate snapshot.
+- `camera-signal`: `to` (another joined player's ID), `session` (1–64 bytes),
+  `kind` (`offer` or `answer`), `sdp` (1–16384 bytes).
+  Offers require the sender's camera on; answers require the recipient's camera on.
+  At most 40 camera signaling attempts per second per connection, independently of voice's 80-attempt limit; invalid signals are dropped.
 
 Server → client:
 - `welcome`: `id`, `players` (initial state, including yourself).
@@ -28,9 +33,11 @@ Server → client:
   Reactions are transient events, not included in snapshots or replayed to late joiners.
 - `correction`: `player` (accepted position after an invalid movement).
 - `signal`: `from` (server-assigned sender ID), `kind`, `data`. Sent only to the requested target; a client-supplied `from` is ignored.
+- `camera-signal`: `from` (server-assigned sender ID), `session`, `kind`, `sdp`.
+  Only delivered to the specified recipient through its bounded writer queue.
 
-`Player`: `{id, name, color, x, y, z, punch, rotation, animation, voice}`.
-Spawn: `(x: 0, y: 0, z: 6)`, with `punch: 0` and `voice: false`. Y is height; avatars face -Z.
+`Player`: `{id, name, color, x, y, z, punch, rotation, animation, voice, camera}`.
+Spawn: `(x: 0, y: 0, z: 6)`, with `punch: 0`, `voice: false`, and `camera: false`. Y is height; avatars face -Z.
 Snapshots replace the remote player map. Local movement is immediate; remote
 avatars use exponential position smoothing and rotation slerp. There is no
 timestamped snapshot buffer yet; adding one is a useful exercise for handling jitter.
@@ -54,3 +61,19 @@ Offer/answer `data` is `{type: "offer" | "answer", sdp: string}`, with `type` ma
 The server allows at most 80 signaling attempts per sending connection per one-second window, including rejected attempts. WebSocket messages are capped at 32,768 bytes to accommodate SDP; existing movement and chat validation still applies. Signals use the same bounded outgoing queues and single writer as other messages. Neither signals nor media are stored; media flows directly between consenting browsers, not through the room server. Reconnection creates a new ID with voice disabled.
 
 Client `subscribeSignals(listener)` delivers transient `VoiceSignal` events and returns an unsubscribe function; signals are not added to the network store or chat history. Send consent with `send({type: 'voice', enabled: true})` and signaling with `send({type: 'signal', to, kind, data})`. WebRTC microphone capture requires a secure browser context (HTTPS or localhost).
+
+## Opt-in webcams
+
+Webcams use video-only WebRTC, not WebSocket media. Each camera sender creates a
+send-only peer connection to each other player, including late joiners; viewers
+can answer without enabling their own camera. Separate incoming/outgoing links
+avoid simultaneous-offer collisions. SDP includes gathered ICE candidates (no
+trickle ICE); `session` identifies an offer so stale answers are ignored.
+WebSocket messages share the 32 KiB limit used by voice signaling.
+Turning the camera off stops local tracks and outgoing links; snapshots remove
+remote tiles/links. Leaving or disconnecting closes all links and stops capture.
+Reconnection leaves the camera off until the user explicitly enables it again.
+
+Camera events use `camera-signal` and `onVideoSignal(listener)` exclusively; voice events keep `signal` and `subscribeSignals(listener)`. Both subscriptions are transient and return unsubscribe functions. A payload from one namespace does not satisfy the other's validation. Consent and signaling rate limits are independent.
+
+Without `VITE_ICE_SERVERS`, webcams use no external ICE servers (`[]`) while voice retains its Google STUN default. Setting this shared build-time variable configures both media paths; webcam connectivity across NAT may require STUN/TURN.

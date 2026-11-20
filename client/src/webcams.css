@@ -1,0 +1,10 @@
+.webcams { min-width: 0; padding: 12px; }
+.webcam-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.webcam-controls small { color: #a6b8c6; font-size: 12px; }
+.webcams [role="alert"] { max-width: 440px; font-size: 12px; color: #ffb86b; }
+.webcam-videos { display: flex; gap: 8px; overflow-x: auto; max-height: 160px; }
+.webcam-videos:not(:empty) { margin-top: 12px; }
+.webcam-tile { margin: 0; position: relative; flex: 0 0 160px; }
+.webcam-tile video { display: block; width: 160px; height: 120px; object-fit: cover; border-radius: 9px; background: #0d1723; }
+.webcam-local { transform: scaleX(-1); }
+.webcam-tile figcaption { position: absolute; bottom: 6px; left: 6px; max-width: 145px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #111b27db; border-radius: 4px; padding: 3px 6px; font-size: 12px; }

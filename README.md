@@ -3,7 +3,7 @@
 Our 3D office: React Three Fiber + Go + WebSocket. One room for up to 10 friends,
 articulated low-poly avatars, WASD/arrow-key movement, third-person and first-person cameras, AABB collision,
 floating name tags, jumping onto furniture, animated punches, a wall mirror,
-text chat, and opt-in voice. No accounts or database.
+text chat, GIF reactions, opt-in voice, and optional webcams. No accounts or database.
 
 ## Run it
 
@@ -132,6 +132,31 @@ This prototype is for trusted environments: anyone who can reach the address can
 For internet access, configure HTTPS with Caddy and access control.
 A microphone is optional; voice starts only after choosing **Join voice**.
 
+## Webcams
+
+After joining, click **Turn camera on** and grant browser camera permission.
+Your video appears in the webcam strip for everyone in the room; you can see
+other cameras without enabling your own. The camera feature never requests audio;
+microphone audio is a separate **Join voice** opt-in.
+**Turn camera off**, leaving, or losing the room connection stops capture.
+Reconnecting does not automatically restart your camera.
+
+Camera access requires **HTTPS or localhost**. Plain HTTP on a LAN IP still
+supports movement/chat but browsers will not allow webcam capture.
+Video uses direct WebRTC connections with low-resolution, 15 fps capture.
+Each sender uploads once per viewer, so test bandwidth before using all 10 cameras.
+No media is recorded or forwarded by the Go server. Participants learn each
+other's network addresses through WebRTC; use this prototype with trusted friends.
+
+By default, the camera feature contacts no STUN/TURN service (voice has its own
+public STUN default described above). Local camera connections work where
+direct routing is available; separate networks/restrictive NATs may fail.
+For those networks, configure `VITE_ICE_SERVERS` at frontend build/dev time with
+a JSON array of browser `RTCIceServer` entries. For example, a STUN entry is
+`[{"urls":"stun:YOUR-STUN-HOST:3478"}]`. Reliable internet use generally needs TURN,
+not only STUN. Use short-lived TURN credentials: Vite configuration is public
+in the browser bundle. No relay is provisioned by this project.
+
 ## Development with hot reload
 
 Go 1.26+ and Node 22.12+ (Node 24 recommended).
@@ -174,6 +199,10 @@ npx playwright install chromium
 npm run test:e2e
 ```
 Checks joining, visible remote movement, chat, and leaving without JavaScript errors.
+Webcam tests use Chromium's fake camera and check video reaching a late viewer,
+two-way sharing, toggling, track cleanup on leave/disconnect, camera-off
+reconnection, and a simulated permission denial. Physical cameras and TURN across
+different networks still need manual testing.
 Screenshot: `client/test-results/office.png`. FPS and camera behavior around
 corners still need manual evaluation.
 Voice tests use Chromium fake audio, verify received RTP bytes in both directions,
@@ -208,6 +237,9 @@ Manual checklist:
 - Face the north-wall mirror and move/turn/jump/punch. Check that the reflection
   includes your body, tracks perspective, and excludes the camera-attached fists.
 - Restarting the server reconnects players and resets them to spawn.
+- Enable webcams in two browsers; both videos appear with names and no audio.
+- Turn a camera off or leave; its video disappears and the device is released.
+- Disconnect/reconnect; the camera stays off until explicitly enabled again.
 - Check smoothness/FPS on a low-end laptop; controls require a keyboard, not touch.
 
 ## Decisions and trade-offs
@@ -230,6 +262,9 @@ Manual checklist:
 - **Small-room WebRTC mesh.** One audio connection per other opted-in friend.
   This is simple for 5–10 users but scales poorly compared with an SFU. No voice
   recording, positional attenuation, or managed TURN service.
+- **Independent video mesh.** Cameras and microphones have separate consent,
+  capture tracks, connections, and signaling namespaces. No media server or new
+  dependency; configure TURN for restrictive networks.
 
 Layout and colliders live in `client/src/world.ts`. The contract lives in
 [`docs/protocol.md`](docs/protocol.md). No Kubernetes manifests at this stage.
