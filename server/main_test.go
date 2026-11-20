@@ -80,7 +80,7 @@ func TestMovementBoundary(t *testing.T) {
 	}{
 		{"walking", input{X: 0.2}, true},
 		{"teleport", input{X: 4}, false},
-		{"outside", input{Z: 10}, false},
+		{"outside", input{Z: 24}, false},
 		{"non finite", input{X: math.NaN()}, false},
 		{"jump and punch upper bounds", input{Y: 3.5, Punch: 0.32}, true},
 		{"negative height", input{Y: -0.01}, false},
@@ -153,6 +153,41 @@ func TestJumpAndPunchStorageAndCorrection(t *testing.T) {
 	h.handle(command{peer: p, input: legacy}, now.Add(150*time.Millisecond))
 	if p.player.Y != 0 || p.player.Punch != 0 {
 		t.Fatalf("omitted fields must default to zero: %+v", p.player)
+	}
+}
+
+func TestGardenMovementBoundary(t *testing.T) {
+	now := time.Now()
+	p := &peer{lastMove: now.Add(-50 * time.Millisecond), player: player{X: 23.3, Z: 15}}
+	if !validMove(p, input{X: 23.5, Z: 15}, now) {
+		t.Fatal("walking inside the expanded garden bounds should be allowed")
+	}
+	if validMove(p, input{X: 23.51, Z: 15}, now) {
+		t.Fatal("walking outside the expanded garden bounds should be rejected")
+	}
+	p.player.X = -23.3
+	if !validMove(p, input{X: -23.5, Z: 15}, now) {
+		t.Fatal("negative garden boundary should be allowed")
+	}
+	if validMove(p, input{X: -23.51, Z: 15}, now) {
+		t.Fatal("negative garden boundary should be enforced")
+	}
+	p.player.X, p.player.Z = 15, 23.3
+	if !validMove(p, input{X: 15, Z: 23.5, Y: 3.5, Punch: 0.32}, now) {
+		t.Fatal("positive Z boundary must preserve valid jump and punch fields")
+	}
+	if validMove(p, input{X: 15, Z: 23.51}, now) {
+		t.Fatal("positive Z garden boundary should be enforced")
+	}
+	p.player.Z = -23.3
+	if !validMove(p, input{X: 15, Z: -23.5}, now) {
+		t.Fatal("negative Z garden boundary should be allowed")
+	}
+	if validMove(p, input{X: 15, Z: -23.51}, now) {
+		t.Fatal("negative Z garden boundary should be enforced")
+	}
+	if validMove(p, input{X: 15, Z: -23.5, Y: 3.51}, now) {
+		t.Fatal("expanded horizontal bounds must not raise the feet height cap")
 	}
 }
 

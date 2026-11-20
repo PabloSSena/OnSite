@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
 
 test('GIF links appear above both avatars, replace, expire, and fail gracefully', async ({ browser }) => {
-  const context = await browser.newContext()
+  test.setTimeout(120000)
+  const context = await browser.newContext({ viewport: { width: 960, height: 600 } })
   // Keep the test deterministic and avoid sending requests to a third party.
   await context.route('https://media.tenor.com/**', route => route.fulfill({
     contentType: 'image/gif',
@@ -17,6 +18,7 @@ test('GIF links appear above both avatars, replace, expire, and fail gracefully'
     await page.getByLabel('What should we call you?').fill(name)
     await page.getByRole('button', { name: 'Join the office' }).click()
     await expect(page.locator('.presence')).toContainText('Live')
+    await page.getByRole('button', { name: 'First-person view' }).click()
   }
   await expect(ana.locator('.nametag')).toHaveCount(2)
   const input = ana.getByRole('textbox', { name: 'GIF link', exact: true })

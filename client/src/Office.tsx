@@ -2,9 +2,10 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { localPlayer, send, useNetwork } from './network'
-import { furniture, monitors, stepPhysics, walls } from './world'
+import { stepPhysics } from './world'
 import WallMirror from './Mirror'
 import Avatar, { FirstPersonFists } from './Avatar'
+import { OfficeWorld } from './OfficeWorld'
 
 export type ViewMode = 'third-person' | 'first-person'
 
@@ -17,7 +18,7 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
   const { camera, gl } = useThree()
   const math = useRef({
     focus: new THREE.Vector3(), desired: new THREE.Vector3(), direction: new THREE.Vector3(),
-    ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 5.5, 7),
+    ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 8, 10),
   })
   useEffect(() => {
     actions.current = { jump: false, punch: false, velocity: 0, cooldown: 0 }
@@ -183,31 +184,13 @@ function Scene({ viewMode }: { viewMode: ViewMode }) {
   const obstacles = useRef<THREE.Group>(null)
   return (
     <>
-      <color attach="background" args={['#c6d8df']} />
-      <fog attach="fog" args={['#c6d8df', 25, 55]} />
-      <ambientLight intensity={1.5} />
-      <directionalLight position={[3, 12, 5]} intensity={2.2} castShadow
-        shadow-mapSize={[1024, 1024]} shadow-camera-left={-12} shadow-camera-right={12}
-        shadow-camera-top={12} shadow-camera-bottom={-12} shadow-normalBias={0.04} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[20, 20]} />
-        <meshStandardMaterial color="#e1e7e5" />
-      </mesh>
-      <gridHelper args={[20, 20, '#b6c8ca', '#ced9d7']} position={[0, 0.01, 0]} />
-      <group ref={obstacles}>
-        {[...walls, ...furniture].map((b, i) => (
-          <mesh key={i} position={b.position} castShadow receiveShadow>
-            <boxGeometry args={b.size} />
-            <meshStandardMaterial color={b.color} />
-          </mesh>
-        ))}
-        {monitors.map((b, i) => (
-          <mesh key={`monitor-${i}`} position={b.position} castShadow>
-            <boxGeometry args={b.size} />
-            <meshStandardMaterial color={b.color} emissive="#407a92" emissiveIntensity={0.35} />
-          </mesh>
-        ))}
-      </group>
+      <color attach="background" args={['#dce5d5']} />
+      <fog attach="fog" args={['#dce5d5', 40, 85]} />
+      <hemisphereLight args={['#fff4da', '#708565', 2]} />
+      <directionalLight position={[-12, 24, 10]} intensity={2.4} color="#fff0d5" castShadow
+        shadow-mapSize={[2048, 2048]} shadow-camera-left={-30} shadow-camera-right={30}
+        shadow-camera-top={30} shadow-camera-bottom={-30} shadow-camera-far={80} shadow-normalBias={0.04} />
+      <OfficeWorld obstacles={obstacles} />
       <WallMirror />
       <Controller obstacles={obstacles} viewMode={viewMode} />
       {Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id}
@@ -219,7 +202,7 @@ function Scene({ viewMode }: { viewMode: ViewMode }) {
 
 export default function Office({ viewMode }: { viewMode: ViewMode }) {
   return (
-    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 70 }}>
+    <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 100 }}>
       <Scene viewMode={viewMode} />
     </Canvas>
   )

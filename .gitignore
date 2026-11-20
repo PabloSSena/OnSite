@@ -5,3 +5,4 @@ client/dist/
 coverage/
 client/test-results/
 client/playwright-report/
+server/tmp/

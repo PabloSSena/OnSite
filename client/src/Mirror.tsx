@@ -10,7 +10,7 @@ export default function WallMirror() {
     if (!group) return
 
     // PlaneGeometry lies in XY with its normal facing +Z, into the room.
-    const geometry = new PlaneGeometry(5, 2.6)
+    const geometry = new PlaneGeometry(3.2, 2.6)
     const mirror = new Reflector(geometry, {
       color: 0x808080,
       textureWidth: 1024,
@@ -33,11 +33,11 @@ export default function WallMirror() {
   }, [])
 
   return (
-    <group position={[0, 1.6, -9.8]}>
+    <group position={[0, 1.6, -15.8]}>
       <group ref={surface} />
-      {/* The backing stays behind the mirror and ahead of the wall at -9.85. */}
+      {/* The backing stays behind the mirror and ahead of the wall at -15.85. */}
       <mesh position={[0, 0, -0.02]}>
-        <boxGeometry args={[5.16, 2.76, 0.02]} />
+        <boxGeometry args={[3.36, 2.76, 0.02]} />
         <meshStandardMaterial color="#202a35" roughness={0.75} />
       </mesh>
     </group>

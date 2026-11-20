@@ -23,11 +23,8 @@ test('articulated avatar renders in the mirror, walks, and keeps first-person le
       await page.keyboard.up(key)
     }
   }
-  // Go around the bench, rather than hiding the lower body behind it.
-  await walk('KeyW', () => position.z < -5.3)
-  await walk('KeyD', () => position.x > 2.65)
-  await walk('KeyW', () => position.z < -8.12)
-  await walk('KeyA', () => position.x < 0.1)
+  // The central hallway leads straight to the north-wall mirror.
+  await walk('KeyW', () => position.z < -14)
   await page.waitForTimeout(400)
   await page.screenshot({ path: testInfo.outputPath('avatar-mirror-idle.png') })
   await page.keyboard.down('KeyD')

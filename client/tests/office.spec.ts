@@ -30,10 +30,10 @@ test('first-person supports mouse look, relative movement, collision, chat, and 
   await expect.poll(() => position.rotation).toBeCloseTo(-Math.PI / 2, 2)
   await page.keyboard.down('KeyW')
   try {
-    await expect.poll(() => position.x, { timeout: 10000 }).toBeGreaterThan(9.2)
-    // Keep walking into the outer wall long enough to detect missing collision.
+    await expect.poll(() => position.x, { timeout: 15000 }).toBeGreaterThan(2.8)
+    // The entrance planter at (4, 5.5) blocks this camera-relative path.
     await page.waitForTimeout(500)
-    expect(position.x).toBeLessThanOrEqual(9.45)
+    expect(position.x).toBeLessThanOrEqual(3.1 + 0.001)
     expect(position.z).toBeCloseTo(6, 1)
   } finally {
     await page.keyboard.up('KeyW')

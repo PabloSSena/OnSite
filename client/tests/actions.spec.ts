@@ -98,16 +98,15 @@ test('actions sync to a second tab, respect input focus, and work in first-perso
     await check.poll(() => samples.slice(firstPersonJump).some(p => p.y > 0.15), poll).toBe(true)
     await check.poll(() => latest()?.y, poll).toBe(0)
 
-    // The central aisle is clear up to the bench at z=-7. Stop before it,
-    // facing north so the mirror and reflected local avatar are easy to inspect.
+    // The central hallway leads to the mirror on the north wall.
     await actor.keyboard.down('KeyW')
     try {
-      await check.poll(() => latest()?.z, { ...poll, timeout: 40000 }).toBeLessThan(-4.7)
+      await check.poll(() => latest()?.z, { ...poll, timeout: 60000 }).toBeLessThan(-14)
     } finally {
       await actor.keyboard.up('KeyW')
     }
     expect(Math.abs(latest()!.x)).toBeLessThan(0.2)
-    expect(latest()!.z).toBeGreaterThan(-5.9)
+    expect(latest()!.z).toBeGreaterThan(-15.3)
     await actor.screenshot({ path: testInfo.outputPath('first-person-mirror.png') })
     await actor.keyboard.press('Escape')
     await check.poll(() => actor.evaluate(() => document.pointerLockElement === null), poll).toBe(true)

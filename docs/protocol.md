@@ -37,14 +37,18 @@ Server → client:
   Only delivered to the specified recipient through its bounded writer queue.
 
 `Player`: `{id, name, color, x, y, z, punch, rotation, animation, voice, camera}`.
-Spawn: `(x: 0, y: 0, z: 6)`, with `punch: 0`, `voice: false`, and `camera: false`. Y is height; avatars face -Z.
+Spawn: `(x: 0, y: 0, z: 6)`, on the porch outside the office, with `punch: 0`, `voice: false`, and `camera: false`. Y is feet height above the ground; avatars face -Z.
+Map bounds: `-23.5 <= x, z <= 23.5` (checked by both client and server).
+The office occupies x `[-16, 16]`, z `[-16, 4]`; a four-unit-wide open entrance
+at x `[-2, 2]`, z `4` connects its central hallway to the garden courtyard.
 Snapshots replace the remote player map. Local movement is immediate; remote
 avatars use exponential position smoothing and rotation slerp. There is no
 timestamped snapshot buffer yet; adding one is a useful exercise for handling jitter.
 
 The server checks map bounds, horizontal speed with tolerance, finite values, and the `y`/`punch` ranges above. Invalid moves return the existing accepted player state through `correction`.
 Jump physics and punch timing are client-side; these fields synchronize visual state, not combat or authoritative vertical physics.
-Furniture collision uses full 3D client-side bounds, including vertical contact; this is **not** an authoritative simulation.
+Wall and furniture collision uses full 3D client-side bounds, including vertical contact; this is **not** an authoritative simulation.
+The external world limits remain x/z ±23.5 at every height. The feet-height cap of 3.5 is an artificial movement limit, not a derived wall-top height; jumping from elevated surfaces does not raise it, and moves above it receive a correction.
 Chat uses connection identity and renders text through React, never HTML.
 GIFs load directly from external hosts in a bounded `<img>` with no referrer.
 The server does not download, proxy, or verify image contents; failed loads show a fallback.

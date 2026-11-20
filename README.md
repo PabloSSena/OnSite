@@ -5,6 +5,9 @@ articulated low-poly avatars, WASD/arrow-key movement, third-person and first-pe
 floating name tags, jumping onto furniture, animated punches, a wall mirror,
 text chat, GIF reactions, opt-in voice, and optional webcams. No accounts or database.
 
+The world is a cozy four-room office house with a connected central hall and
+garden courtyard. See [`docs/world.md`](docs/world.md) for the layout and routes.
+
 ## Run it
 
 Requires Docker Desktop with Linux containers.
@@ -35,8 +38,8 @@ Mouse capture requires a supported desktop browser on localhost or HTTPS.
 - Press **F** or **left click** the scene to punch. First-person displays both fists,
   with the right fist extending during a punch. The initial mouse-capture click
   does not punch; click again once captured.
-- Jumping and punching are visible to friends and in the mirror on the north wall
-  (straight ahead from spawn). The mirror reflects the scene from your viewing
+- Jumping and punching are visible to friends and in the mirror at the north end
+  of the central hallway (walk straight ahead from spawn). It reflects your viewing
   angle, including your own full body in first-person.
 - Escape releases first-person controls for chat. Typing does not trigger actions.
 - Jump toward tables, the bench, planters, or monitors to land on their tops.
@@ -100,6 +103,11 @@ Run commands from that directory, not the original `office` checkout. Worktrees
 have separate working files; switching the original checkout does not move
 uncommitted feature edits between branches. Pre-existing edits in the original
 checkout have not been removed.
+
+`updates` integrates the source worktrees `main`, `gifs`, `webcam`, and
+`world/cozy-office`. Their uncommitted working files were captured in detached
+snapshot commits before merging; their branches, indexes, and files were not
+modified. Generated `server/tmp` build output was excluded.
 
 To run this worktree alongside an app already using port 8081 (PowerShell):
 
