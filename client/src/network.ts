@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { validGIFURL } from './gif'
 
 export type Player = {
   id: string
@@ -10,6 +11,7 @@ export type Player = {
   animation: 'idle' | 'walk'
 }
 export type Chat = { id: string; name: string; text: string; at: string }
+export type GIFReaction = { url: string; receivedAt: number }
 type ServerMessage =
   | { type: 'welcome'; id: string; players: Player[] }
   | { type: 'snapshot'; players: Player[] }
@@ -17,15 +19,17 @@ type ServerMessage =
   | { type: 'leave'; id: string }
   | { type: 'correction'; player: Player }
   | ({ type: 'chat' } & Chat)
+  | { type: 'gif'; id: string; url: string }
 
 type State = {
   id: string | null
   status: 'offline' | 'connecting' | 'online' | 'reconnecting'
   players: Record<string, Player>
   chats: Chat[]
+  gifs: Record<string, GIFReaction>
 }
 export const useNetwork = create<State>(() => ({
-  id: null, status: 'offline', players: {}, chats: [],
+  id: null, status: 'offline', players: {}, chats: [], gifs: {},
 }))
 
 // Mutable local simulation: no React re-render on every animation frame.
@@ -61,6 +65,7 @@ export function connect(name: string): () => void {
           useNetwork.setState({
             id: msg.id, status: 'online',
             players: Object.fromEntries(msg.players.map(p => [p.id, p])),
+            gifs: {},
           })
           break
         }
@@ -74,7 +79,9 @@ export function connect(name: string): () => void {
           useNetwork.setState(s => {
             const players = { ...s.players }
             delete players[msg.id]
-            return { players }
+            const gifs = { ...s.gifs }
+            delete gifs[msg.id]
+            return { players, gifs }
           })
           break
         case 'correction':
@@ -83,12 +90,19 @@ export function connect(name: string): () => void {
         case 'chat':
           useNetwork.setState(s => ({ chats: [...s.chats.slice(-99), msg] }))
           break
+        case 'gif':
+          if (validGIFURL(msg.url) && useNetwork.getState().players[msg.id]) {
+            useNetwork.setState(s => ({
+              gifs: { ...s.gifs, [msg.id]: { url: msg.url, receivedAt: Date.now() } },
+            }))
+          }
+          break
       }
     }
     ws.onerror = () => ws.close()
     ws.onclose = () => {
       if (stopped) return
-      useNetwork.setState({ id: null, players: {}, status: 'reconnecting' })
+      useNetwork.setState({ id: null, players: {}, gifs: {}, status: 'reconnecting' })
       retry = setTimeout(open, Math.min(1000 * 2 ** attempt++, 10000))
     }
   }
@@ -102,6 +116,6 @@ export function connect(name: string): () => void {
       current.close()
     }
     if (socket === current) socket = null
-    useNetwork.setState({ id: null, players: {}, status: 'offline' })
+    useNetwork.setState({ id: null, players: {}, gifs: {}, status: 'offline' })
   }
 }

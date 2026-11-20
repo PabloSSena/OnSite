@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -39,6 +40,7 @@ type input struct {
 	Rotation  float64 `json:"rotation"`
 	Animation string  `json:"animation"`
 	Text      string  `json:"text"`
+	URL       string  `json:"url"`
 }
 
 type peer struct {
@@ -49,6 +51,7 @@ type peer struct {
 	player    player
 	lastMove  time.Time
 	lastChat  time.Time
+	lastGIF   time.Time
 	lastInput time.Time
 	joined    bool
 }
@@ -130,6 +133,25 @@ func validMove(p *peer, m input, now time.Time) bool {
 	return math.Hypot(m.X-p.player.X, m.Z-p.player.Z) <= 6*elapsed+0.25
 }
 
+// Only direct media links are accepted. The server never fetches the URL.
+func validGIFURL(value string) bool {
+	if len(value) > 1500 || strings.TrimSpace(value) != value {
+		return false
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.User != nil || (u.Port() != "" && u.Port() != "443") || u.Fragment != "" ||
+		!strings.HasSuffix(strings.ToLower(u.Path), ".gif") {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "media.tenor.com", "media.giphy.com", "i.giphy.com",
+		"media0.giphy.com", "media1.giphy.com", "media2.giphy.com",
+		"media3.giphy.com", "media4.giphy.com", "cdn.discordapp.com", "media.discordapp.net":
+		return true
+	}
+	return false
+}
+
 func (h *hub) handle(c command, now time.Time) {
 	p, m := c.peer, c.input
 	if c.leave {
@@ -158,6 +180,12 @@ func (h *hub) handle(c command, now time.Time) {
 		return
 	}
 	switch m.Type {
+	case "gif":
+		if !validGIFURL(m.URL) || now.Sub(p.lastGIF) < 2*time.Second {
+			return
+		}
+		p.lastGIF = now
+		h.broadcast(map[string]any{"type": "gif", "id": p.player.ID, "url": m.URL})
 	case "move":
 		if now.Sub(p.lastInput) < 30*time.Millisecond {
 			return

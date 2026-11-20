@@ -1,11 +1,31 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { localPlayer, send, useNetwork, type Player } from './network'
+import { localPlayer, send, useNetwork, type Player, type GIFReaction } from './network'
 import { blocked, furniture, walls } from './world'
 
+function GIFBubble({ reaction, name }: { reaction: GIFReaction; name: string }) {
+  const [visible, setVisible] = useState(true)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(false), Math.max(0, reaction.receivedAt + 8000 - Date.now()))
+    return () => clearTimeout(timer)
+  }, [reaction.receivedAt])
+  if (!visible) return null
+  return (
+    <Html position={[0, 3, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
+      <div className="gif-bubble" aria-label={`${name}'s GIF reaction`}>
+        {failed ? <span>GIF unavailable</span> :
+          <img src={reaction.url} alt={`${name}'s GIF`} referrerPolicy="no-referrer"
+            onError={() => setFailed(true)} />}
+      </div>
+    </Html>
+  )
+}
+
 function Avatar({ player, local = false }: { player: Player; local?: boolean }) {
+  const reaction = useNetwork(s => s.gifs[player.id])
   const group = useRef<THREE.Group>(null!)
   const body = useRef<THREE.Mesh>(null!)
   const target = useRef(new THREE.Quaternion())
@@ -36,6 +56,7 @@ function Avatar({ player, local = false }: { player: Player; local?: boolean }) 
       <Html position={[0, 1.95, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
         <span className={`nametag ${local ? 'me' : ''}`}>{player.name}{local ? ' (you)' : ''}</span>
       </Html>
+      {reaction && <GIFBubble key={reaction.receivedAt} reaction={reaction} name={player.name} />}
     </group>
   )
 }
