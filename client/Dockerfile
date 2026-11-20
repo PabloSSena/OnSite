@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+ARG VITE_ICE_SERVERS
 RUN npm run build
 
 FROM nginx:1.28-alpine

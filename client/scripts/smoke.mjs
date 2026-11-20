@@ -1,7 +1,7 @@
 // Real integration through the proxy: two clients, movement, chat, leaving, reconnection.
 import assert from 'node:assert/strict'
 
-const base = process.env.OFFICE_URL ?? 'http://localhost:8080'
+const base = process.env.OFFICE_URL ?? 'http://localhost:8081'
 const sockets = []
 const health = await fetch(`${base}/healthz`)
 assert.equal(await health.text(), 'ok')

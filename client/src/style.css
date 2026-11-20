@@ -5,6 +5,7 @@ main { height: 100dvh; min-height: 500px; position: relative; overflow: hidden; 
 button, input { font: inherit; }
 button { cursor: pointer; border: 1px solid #ffffff25; color: inherit; background: #ffffff0a; border-radius: 9px; padding: 9px 15px; }
 button:hover { background: #ffffff15; }
+button[aria-pressed="true"] { background: #65dfbb; color: #10271f; }
 button:disabled { opacity: .5; cursor: default; }
 input { width: 100%; min-width: 0; border: 1px solid #ffffff25; border-radius: 9px; background: #0d1723; color: #fff; padding: 12px; outline: none; }
 input:focus { border-color: #65dfbb; }
@@ -43,9 +44,15 @@ h1 { font-size: 40px; line-height: 1.08; letter-spacing: -1.5px; margin: 18px 0;
 .chat button { background: #65dfbb; color: #112b22; }
 .nametag { white-space: nowrap; color: #fff; font-size: 12px; padding: 5px 9px; border-radius: 7px; background: #112132db; user-select: none; }
 .nametag.me { border: 1px solid #65dfbb; }
+.voice { position: absolute; left: 24px; top: 110px; max-width: min(410px, calc(100vw - 48px)); padding: 12px; }
+.voice-status { color: #b5c4ce; font-size: 12px; margin-bottom: 8px; }
+.voice-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.voice-controls button { font-size: 12px; padding: 7px 10px; }
+.voice-error { color: #ffb86b; font-size: 12px; line-height: 1.5; margin: 10px 0 0; }
 @media (max-width: 750px) {
   .subtitle, .help, .count { display: none; }
   .hud { inset: 12px 12px auto; padding: 10px; gap: 10px; }
   .chat { right: 12px; bottom: 12px; width: min(310px, calc(100vw - 24px)); }
   .messages { height: 130px; }
+  .voice { top: 90px; left: 12px; max-width: calc(100vw - 24px); }
 }

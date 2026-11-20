@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +20,17 @@ func TestMovementBoundary(t *testing.T) {
 		{"teleport", input{X: 4}, false},
 		{"outside", input{Z: 10}, false},
 		{"non finite", input{X: math.NaN()}, false},
+		{"jump and punch upper bounds", input{Y: 3.5, Punch: 0.32}, true},
+		{"negative height", input{Y: -0.01}, false},
+		{"height above limit", input{Y: 3.51}, false},
+		{"height NaN", input{Y: math.NaN()}, false},
+		{"height positive infinity", input{Y: math.Inf(1)}, false},
+		{"height negative infinity", input{Y: math.Inf(-1)}, false},
+		{"negative punch", input{Punch: -0.01}, false},
+		{"punch above limit", input{Punch: 0.33}, false},
+		{"punch NaN", input{Punch: math.NaN()}, false},
+		{"punch positive infinity", input{Punch: math.Inf(1)}, false},
+		{"punch negative infinity", input{Punch: math.Inf(-1)}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := validMove(p, tc.move, now); got != tc.want {
@@ -28,6 +41,56 @@ func TestMovementBoundary(t *testing.T) {
 	p.lastMove = now.Add(-time.Hour)
 	if validMove(p, input{X: 8}, now) {
 		t.Fatal("idle time must not permit teleport")
+	}
+}
+
+func TestJumpAndPunchStorageAndCorrection(t *testing.T) {
+	h := newHub()
+	now := time.Now()
+	p := &peer{
+		joined: true, send: make(chan []byte, 8),
+		player: player{ID: "jumper"}, lastMove: now.Add(-50 * time.Millisecond),
+	}
+	h.peers[p] = true
+	h.handle(command{peer: p, input: input{Type: "move", Y: 0.8, Punch: 0.24}}, now)
+	if p.player.Y != 0.8 || p.player.Punch != 0.24 {
+		t.Fatalf("jump and punch not stored: %+v", p.player)
+	}
+	if got := h.players(); len(got) != 1 || got[0].Y != 0.8 || got[0].Punch != 0.24 {
+		t.Fatalf("snapshot state lost jump or punch: %+v", got)
+	}
+	accepted := p.player
+	for i, move := range []input{
+		{Type: "move", Y: 3.6},
+		{Type: "move", Punch: 0.33},
+	} {
+		h.handle(command{peer: p, input: move}, now.Add(time.Duration(i+1)*50*time.Millisecond))
+		if p.player != accepted {
+			t.Fatalf("invalid move changed accepted state: %+v", p.player)
+		}
+		var correction struct {
+			Type   string `json:"type"`
+			Player player `json:"player"`
+		}
+		select {
+		case data := <-p.send:
+			if err := json.Unmarshal(data, &correction); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatal("invalid move did not send correction")
+		}
+		if correction.Type != "correction" || correction.Player != accepted {
+			t.Fatalf("unexpected correction: %+v", correction)
+		}
+	}
+	var legacy input
+	if err := json.Unmarshal([]byte(`{"type":"move","x":0,"z":0,"rotation":0,"animation":"idle"}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	h.handle(command{peer: p, input: legacy}, now.Add(150*time.Millisecond))
+	if p.player.Y != 0 || p.player.Punch != 0 {
+		t.Fatalf("omitted fields must default to zero: %+v", p.player)
 	}
 }
 
@@ -50,5 +113,183 @@ func TestChatIdentityAndLimit(t *testing.T) {
 	}
 	if clean("  Hey👋\n  ", 4) != "Hey👋" {
 		t.Fatal("unicode trimming failed")
+	}
+}
+
+func signalPeers() (*hub, *peer, *peer, *peer) {
+	h := newHub()
+	peers := make([]*peer, 3)
+	for i, id := range []string{"sender", "target", "bystander"} {
+		peers[i] = &peer{
+			joined: true, send: make(chan []byte, 128),
+			player: player{ID: id, Voice: true},
+		}
+		h.peers[peers[i]] = true
+	}
+	return h, peers[0], peers[1], peers[2]
+}
+
+func TestVoiceConsentAndReconnect(t *testing.T) {
+	h := newHub()
+	now := time.Now()
+	p := &peer{send: make(chan []byte, 16), player: player{ID: "first", Voice: true}}
+	h.handle(command{peer: p, input: input{Type: "join", Name: "Ana"}}, now)
+	if p.player.Voice {
+		t.Fatal("join must start with voice disabled")
+	}
+	for _, enabled := range []bool{true, false, true} {
+		h.handle(command{peer: p, input: input{Type: "voice", Enabled: &enabled}}, now)
+		if p.player.Voice != enabled || h.players()[0].Voice != enabled {
+			t.Fatal("voice consent not reflected in snapshot state")
+		}
+	}
+	h.handle(command{peer: p, input: input{Type: "voice"}}, now)
+	if !p.player.Voice {
+		t.Fatal("missing enabled must not change consent")
+	}
+	h.handle(command{peer: p, leave: true}, now)
+	fresh := &peer{send: make(chan []byte, 16), player: player{ID: "new"}}
+	h.handle(command{peer: fresh, input: input{Type: "join"}}, now)
+	if len(h.players()) != 1 || fresh.player.Voice {
+		t.Fatal("reconnection must not inherit consent")
+	}
+	h.handle(command{peer: p, input: input{Type: "signal", To: "new", Kind: "ice", Data: json.RawMessage("null")}}, now)
+	if len(fresh.send) != 2 {
+		t.Fatal("departed sender must not route signals")
+	}
+}
+
+func TestSignalTargetAndIdentity(t *testing.T) {
+	for _, payload := range []string{
+		`{"type":"signal","from":"spoofed","to":"target","kind":"offer","data":{"type":"offer","sdp":"v=0\r\n"}}`,
+		`{"type":"signal","to":"target","kind":"answer","data":{"type":"answer","sdp":"v=0\r\n"}}`,
+		`{"type":"signal","to":"target","kind":"ice","data":{"candidate":"candidate:1","sdpMid":"0","sdpMLineIndex":0,"usernameFragment":"abc"}}`,
+		`{"type":"signal","to":"target","kind":"ice","data":null}`,
+	} {
+		t.Run(payload, func(t *testing.T) {
+			h, sender, target, bystander := signalPeers()
+			var m input
+			if err := json.Unmarshal([]byte(payload), &m); err != nil {
+				t.Fatal(err)
+			}
+			h.handle(command{peer: sender, input: m}, time.Now())
+			if len(target.send) != 1 || len(sender.send) != 0 || len(bystander.send) != 0 {
+				t.Fatal("signal must only reach target")
+			}
+			var got struct {
+				Type string          `json:"type"`
+				From string          `json:"from"`
+				Kind string          `json:"kind"`
+				Data json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(<-target.send, &got); err != nil {
+				t.Fatal(err)
+			}
+			if got.Type != "signal" || got.From != "sender" || got.Kind != m.Kind || string(got.Data) != string(m.Data) {
+				t.Fatalf("incorrect signal envelope: %+v", got)
+			}
+		})
+	}
+}
+
+func TestSignalRejectsInvalidRoutesAndConsent(t *testing.T) {
+	for _, scenario := range []string{"sender disabled", "target disabled", "self", "missing target", "left target", "left sender"} {
+		t.Run(scenario, func(t *testing.T) {
+			h, sender, target, bystander := signalPeers()
+			m := input{Type: "signal", To: "target", Kind: "ice", Data: json.RawMessage("null")}
+			switch scenario {
+			case "sender disabled":
+				sender.player.Voice = false
+			case "target disabled":
+				target.player.Voice = false
+			case "self":
+				m.To = "sender"
+			case "missing target":
+				m.To = "absent"
+			case "left target":
+				delete(h.peers, target)
+			case "left sender":
+				delete(h.peers, sender)
+			}
+			h.handle(command{peer: sender, input: m}, time.Now())
+			if len(sender.send)+len(target.send)+len(bystander.send) != 0 {
+				t.Fatal("invalid route must be silently ignored")
+			}
+		})
+	}
+}
+
+func TestSignalValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name, kind, data string
+		want             bool
+	}{
+		{"offer boundary", "offer", `{"type":"offer","sdp":"` + strings.Repeat("s", 16000) + `"}`, true},
+		{"offer oversized", "offer", `{"type":"offer","sdp":"` + strings.Repeat("s", 16001) + `"}`, false},
+		{"answer boundary", "answer", `{"type":"answer","sdp":"` + strings.Repeat("s", 16000) + `"}`, true},
+		{"answer oversized", "answer", `{"type":"answer","sdp":"` + strings.Repeat("s", 16001) + `"}`, false},
+		{"mismatched description", "offer", `{"type":"answer","sdp":"v=0"}`, false},
+		{"missing description", "offer", `{"type":"offer"}`, false},
+		{"null description", "offer", `{"type":"offer","sdp":null}`, false},
+		{"non-string description", "answer", `{"type":"answer","sdp":42}`, false},
+		{"unknown description field", "offer", `{"type":"offer","sdp":"","extra":true}`, false},
+		{"candidate boundary", "ice", `{"candidate":"` + strings.Repeat("c", 4096) + `"}`, true},
+		{"candidate oversized", "ice", `{"candidate":"` + strings.Repeat("c", 4097) + `"}`, false},
+		{"empty candidate", "ice", `{"candidate":""}`, true},
+		{"null marker", "ice", `null`, true},
+		{"nullable fields", "ice", `{"candidate":"c","sdpMid":null,"sdpMLineIndex":null,"usernameFragment":null}`, true},
+		{"missing candidate", "ice", `{}`, false},
+		{"null candidate", "ice", `{"candidate":null}`, false},
+		{"non-string candidate", "ice", `{"candidate":1}`, false},
+		{"bad mid", "ice", `{"candidate":"c","sdpMid":1}`, false},
+		{"oversized mid", "ice", `{"candidate":"c","sdpMid":"` + strings.Repeat("m", 257) + `"}`, false},
+		{"oversized username", "ice", `{"candidate":"c","usernameFragment":"` + strings.Repeat("u", 257) + `"}`, false},
+		{"negative index", "ice", `{"candidate":"c","sdpMLineIndex":-1}`, false},
+		{"fractional index", "ice", `{"candidate":"c","sdpMLineIndex":0.5}`, false},
+		{"oversized index", "ice", `{"candidate":"c","sdpMLineIndex":65536}`, false},
+		{"unknown candidate field", "ice", `{"candidate":"c","extra":true}`, false},
+		{"unknown kind", "rollback", `null`, false},
+		{"null offer", "offer", `null`, false},
+		{"array", "ice", `[]`, false},
+		{"string", "ice", `"candidate"`, false},
+		{"missing data", "ice", ``, false},
+		{"broken JSON", "offer", `{`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := validSignal(tc.kind, json.RawMessage(tc.data)); got != tc.want {
+				t.Fatalf("validSignal = %v, want %v", got, tc.want)
+			}
+			if !tc.want {
+				h, sender, target, _ := signalPeers()
+				h.handle(command{peer: sender, input: input{
+					Type: "signal", To: "target", Kind: tc.kind, Data: json.RawMessage(tc.data),
+				}}, time.Now())
+				if len(target.send) != 0 {
+					t.Fatal("malformed signal was routed")
+				}
+			}
+		})
+	}
+}
+
+func TestSignalRateLimit(t *testing.T) {
+	h, sender, target, bystander := signalPeers()
+	now := time.Now()
+	m := input{Type: "signal", To: "target", Kind: "ice", Data: json.RawMessage("null")}
+	for i := 0; i < 81; i++ {
+		h.handle(command{peer: sender, input: m}, now)
+	}
+	if len(target.send) != 80 {
+		t.Fatalf("accepted %d signals, want 80", len(target.send))
+	}
+	m.To = "sender"
+	h.handle(command{peer: bystander, input: m}, now)
+	if len(sender.send) != 1 {
+		t.Fatal("rate limit must be per sender")
+	}
+	m.To = "target"
+	h.handle(command{peer: sender, input: m}, now.Add(time.Second))
+	if len(target.send) != 81 {
+		t.Fatal("signal window must reset after one second")
 	}
 }

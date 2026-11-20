@@ -26,31 +26,42 @@ type player struct {
 	Name      string  `json:"name"`
 	Color     string  `json:"color"`
 	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
 	Z         float64 `json:"z"`
+	Punch     float64 `json:"punch"`
 	Rotation  float64 `json:"rotation"`
 	Animation string  `json:"animation"`
+	Voice     bool    `json:"voice"`
 }
 
 type input struct {
-	Type      string  `json:"type"`
-	Name      string  `json:"name"`
-	X         float64 `json:"x"`
-	Z         float64 `json:"z"`
-	Rotation  float64 `json:"rotation"`
-	Animation string  `json:"animation"`
-	Text      string  `json:"text"`
+	Type      string          `json:"type"`
+	Name      string          `json:"name"`
+	X         float64         `json:"x"`
+	Y         float64         `json:"y"`
+	Z         float64         `json:"z"`
+	Punch     float64         `json:"punch"`
+	Rotation  float64         `json:"rotation"`
+	Animation string          `json:"animation"`
+	Text      string          `json:"text"`
+	Enabled   *bool           `json:"enabled"`
+	To        string          `json:"to"`
+	Kind      string          `json:"kind"`
+	Data      json.RawMessage `json:"data"`
 }
 
 type peer struct {
-	conn      *websocket.Conn
-	send      chan []byte
-	done      chan struct{}
-	once      sync.Once
-	player    player
-	lastMove  time.Time
-	lastChat  time.Time
-	lastInput time.Time
-	joined    bool
+	conn         *websocket.Conn
+	send         chan []byte
+	done         chan struct{}
+	once         sync.Once
+	player       player
+	lastMove     time.Time
+	lastChat     time.Time
+	lastInput    time.Time
+	joined       bool
+	signalWindow time.Time
+	signalCount  int
 }
 
 func (p *peer) stop() {
@@ -118,16 +129,63 @@ func (h *hub) players() []player {
 }
 
 func validMove(p *peer, m input, now time.Time) bool {
-	if math.IsNaN(m.X) || math.IsNaN(m.Z) || math.IsNaN(m.Rotation) ||
-		math.IsInf(m.X, 0) || math.IsInf(m.Z, 0) || math.IsInf(m.Rotation, 0) {
+	if math.IsNaN(m.X) || math.IsNaN(m.Y) || math.IsNaN(m.Z) || math.IsNaN(m.Punch) || math.IsNaN(m.Rotation) ||
+		math.IsInf(m.X, 0) || math.IsInf(m.Y, 0) || math.IsInf(m.Z, 0) || math.IsInf(m.Punch, 0) || math.IsInf(m.Rotation, 0) {
 		return false
 	}
-	if math.Abs(m.X) > 9.5 || math.Abs(m.Z) > 9.5 || math.Abs(m.Rotation) > math.Pi*2 {
+	if math.Abs(m.X) > 9.5 || math.Abs(m.Z) > 9.5 || math.Abs(m.Rotation) > math.Pi*2 ||
+		m.Y < 0 || m.Y > 3.5 || m.Punch < 0 || m.Punch > 0.32 {
 		return false
 	}
 	// Allow for jitter, but cap elapsed time to prevent teleporting after idling.
 	elapsed := math.Min(now.Sub(p.lastMove).Seconds(), 0.5)
 	return math.Hypot(m.X-p.player.X, m.Z-p.player.Z) <= 6*elapsed+0.25
+}
+
+// Validate only the bounded WebRTC fields we relay; never trust a supplied source ID.
+func validSignal(kind string, data json.RawMessage) bool {
+	if kind != "offer" && kind != "answer" && kind != "ice" {
+		return false
+	}
+	if kind == "ice" && string(data) == "null" {
+		return true
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(data, &fields) != nil || fields == nil {
+		return false
+	}
+	stringField := func(key string, max int) bool {
+		var s string
+		raw, ok := fields[key]
+		return ok && string(raw) != "null" && json.Unmarshal(raw, &s) == nil && len(s) <= max
+	}
+	if kind != "ice" {
+		var descriptionType string
+		return len(fields) == 2 && json.Unmarshal(fields["type"], &descriptionType) == nil &&
+			descriptionType == kind && stringField("sdp", 16000)
+	}
+	if !stringField("candidate", 4096) {
+		return false
+	}
+	for key, raw := range fields {
+		switch key {
+		case "candidate":
+		case "sdpMid", "usernameFragment":
+			if string(raw) != "null" && !stringField(key, 256) {
+				return false
+			}
+		case "sdpMLineIndex":
+			if string(raw) != "null" {
+				var index int
+				if json.Unmarshal(raw, &index) != nil || index < 0 || index > 65535 {
+					return false
+				}
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hub) handle(c command, now time.Time) {
@@ -149,6 +207,7 @@ func (h *hub) handle(c command, now time.Time) {
 			p.player.Name = "Guest"
 		}
 		p.player.Animation = "idle"
+		p.player.Voice = false
 		p.player.Z = 6
 		p.lastMove = now
 		p.joined = true
@@ -157,7 +216,30 @@ func (h *hub) handle(c command, now time.Time) {
 		h.broadcast(map[string]any{"type": "join", "player": p.player})
 		return
 	}
+	if !h.peers[p] {
+		return
+	}
 	switch m.Type {
+	case "voice":
+		if m.Enabled != nil {
+			p.player.Voice = *m.Enabled
+		}
+	case "signal":
+		if now.Sub(p.signalWindow) >= time.Second {
+			p.signalWindow, p.signalCount = now, 0
+		}
+		p.signalCount++
+		if p.signalCount > 80 || !p.player.Voice || m.To == p.player.ID || !validSignal(m.Kind, m.Data) {
+			return
+		}
+		for target := range h.peers {
+			if target.player.ID == m.To && target.player.Voice {
+				h.send(target, map[string]any{
+					"type": "signal", "from": p.player.ID, "kind": m.Kind, "data": m.Data,
+				})
+				break
+			}
+		}
 	case "move":
 		if now.Sub(p.lastInput) < 30*time.Millisecond {
 			return
@@ -168,6 +250,7 @@ func (h *hub) handle(c command, now time.Time) {
 			return
 		}
 		p.player.X, p.player.Z, p.player.Rotation = m.X, m.Z, m.Rotation
+		p.player.Y, p.player.Punch = m.Y, m.Punch
 		p.player.Animation = "idle"
 		if m.Animation == "walk" {
 			p.player.Animation = "walk"
@@ -179,7 +262,7 @@ func (h *hub) handle(c command, now time.Time) {
 			return
 		}
 		p.lastChat = now
-		h.broadcast(map[string]any{
+		h.send(p, map[string]any{
 			"type": "chat", "id": p.player.ID, "name": p.player.Name,
 			"text": text, "at": now.UTC().Format(time.RFC3339),
 		})
@@ -213,7 +296,7 @@ func (h *hub) serve(ctx context.Context, w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return
 	}
-	conn.SetReadLimit(2048)
+	conn.SetReadLimit(32768)
 	id := make([]byte, 8)
 	if _, err := rand.Read(id); err != nil {
 		conn.CloseNow()
@@ -298,7 +381,7 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	addr := os.Getenv("ADDR")
 	if addr == "" {
-		addr = ":8080"
+		addr = ":8081"
 	}
 	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

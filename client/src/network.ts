@@ -5,12 +5,24 @@ export type Player = {
   name: string
   color: string
   x: number
+  y: number
   z: number
+  punch: number
   rotation: number
   animation: 'idle' | 'walk'
+  voice: boolean
 }
 export type Chat = { id: string; name: string; text: string; at: string }
+export type VoiceSignal =
+  | { type: 'signal'; from: string; kind: 'offer' | 'answer'; data: RTCSessionDescriptionInit }
+  | { type: 'signal'; from: string; kind: 'ice'; data: RTCIceCandidateInit | null }
+const signalListeners = new Set<(signal: VoiceSignal) => void>()
+export function subscribeSignals(listener: (signal: VoiceSignal) => void): () => void {
+  signalListeners.add(listener)
+  return () => { signalListeners.delete(listener) }
+}
 type ServerMessage =
+  | VoiceSignal
   | { type: 'welcome'; id: string; players: Player[] }
   | { type: 'snapshot'; players: Player[] }
   | { type: 'join'; player: Player }
@@ -29,7 +41,7 @@ export const useNetwork = create<State>(() => ({
 }))
 
 // Mutable local simulation: no React re-render on every animation frame.
-export const localPlayer = { x: 0, z: 6, rotation: 0, animation: 'idle' as 'idle' | 'walk' }
+export const localPlayer = { x: 0, y: 0, z: 6, punch: 0, rotation: 0, animation: 'idle' as 'idle' | 'walk' }
 let socket: WebSocket | null = null
 
 export function send(message: object) {
@@ -53,7 +65,11 @@ export function connect(name: string): () => void {
       if (stopped) return
       let msg: ServerMessage
       try { msg = JSON.parse(event.data) as ServerMessage } catch { return }
+      console.log('heyy', msg.type)
       switch (msg.type) {
+        case 'signal':
+          signalListeners.forEach(listener => listener(msg))
+          break
         case 'welcome': {
           attempt = 0
           const me = msg.players.find(p => p.id === msg.id)

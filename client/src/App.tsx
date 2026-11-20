@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import Office from './Office'
+import Office, { type ViewMode } from './Office'
 import { connect, send, useNetwork } from './network'
+import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
 
 const labels = { offline: 'Offline', connecting: 'Connecting…', online: 'Live', reconnecting: 'Reconnecting… (room may be full)' }
 
@@ -8,8 +9,12 @@ export default function App() {
   const [name, setName] = useState(() => sessionStorage.getItem('office-name') ?? '')
   const [joined, setJoined] = useState(false)
   const [text, setText] = useState('')
+  const [viewMode, setViewMode] = useState<ViewMode>('first-person')
   const { status, players, chats } = useNetwork()
+  const voice = useVoice()
   const log = useRef<HTMLDivElement>(null)
+
+
   useEffect(() => {
     if (joined) return connect(name)
   }, [joined, name])
@@ -25,21 +30,43 @@ export default function App() {
     setName(trimmed)
     setJoined(true)
   }
+
   function chat(e: FormEvent) {
     e.preventDefault()
     if (!text.trim() || status !== 'online') return
     send({ type: 'chat', text: text.trim() })
     setText('')
   }
+
   return (
     <main>
-      <Office />
+      <Office viewMode={viewMode} />
       <header className="hud">
         <div><strong><span className="brand-dot" /> office</strong><span className="subtitle">Close, even from afar.</span></div>
         <div className="presence"><span className={status === 'online' ? 'live' : ''}>●</span> {labels[status]} <span className="count">{Object.keys(players).length}/10 people</span></div>
-        {joined && <button onClick={() => setJoined(true)}>Leave</button>}
+        {joined && <button aria-pressed={viewMode === 'first-person'} onClick={() => setViewMode(viewMode === 'third-person' ? 'first-person' : 'third-person')}>First-person view</button>}
+        {joined && <button onClick={() => setJoined(false)}>Leave</button>}
       </header>
-      <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to move <span>·</span> Click the chat to talk</div>
+      {joined && <section className="voice panel" aria-label="Voice chat">
+        <div className="voice-status" role="status">{voice.status === 'off' ? 'Voice: off'
+          : voice.status === 'requesting' ? 'Requesting microphone…'
+            : `Voice: ${voice.connected} connected · ${voice.muted ? 'Mic muted' : 'Mic on'}`}</div>
+        <div className="voice-controls">
+          {voice.status === 'off'
+            ? <button onClick={() => void joinVoice()} disabled={status !== 'online'}>Join voice</button>
+            : <>
+              {voice.status === 'active' && <button onClick={toggleMicrophone} aria-pressed={voice.muted}>
+                {voice.muted ? 'Unmute microphone' : 'Mute microphone'}
+              </button>}
+              <button onClick={leaveVoice}>{voice.status === 'requesting' ? 'Cancel microphone request' : 'Leave voice'}</button>
+            </>}
+          {voice.playbackBlocked && <button onClick={() => void enableVoicePlayback()}>Enable sound</button>}
+        </div>
+        {voice.error && <p className="voice-error" role="alert">{voice.error}</p>}
+      </section>}
+      <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span>·</span>
+        <kbd>Space</kbd> Jump <span>·</span> <kbd>F</kbd> / Left click Punch<br />
+        {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse / chat' : 'Click the scene to play · Click the chat to talk'}</div>
       {!joined ? (
         <div className="overlay">
           <form className="join panel" onSubmit={enter}>
@@ -49,7 +76,7 @@ export default function App() {
             <label htmlFor="name">What should we call you?</label>
             <input id="name" autoFocus maxLength={24} value={name} onChange={e => setName(e.target.value)} placeholder="Your name" required />
             <button className="primary" type="submit">Join the office →</button>
-            <small>Prototype • movement + chat • voice comes later</small>
+            <small>Movement + chat + opt-in voice • headphones recommended</small>
           </form>
         </div>
       ) : (

@@ -5,8 +5,9 @@ export default defineConfig({
   workers: 1,
   timeout: 60000,
   use: {
-    baseURL: process.env.OFFICE_URL ?? 'http://localhost:8080',
-    viewport: { width: 1280, height: 800 },
+    baseURL: process.env.OFFICE_URL ?? 'http://localhost:8081',
+    // Leave GPU headroom for the live room and two WebGL tabs under test.
+    viewport: { width: 960, height: 600 },
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
     launchOptions: {
