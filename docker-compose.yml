@@ -4,6 +4,9 @@ services:
       context: ./server
     environment:
       ADDR: ":8081"
+      DESKS_FILE: /data/desks.json
+    volumes:
+      - office-data:/data
     restart: unless-stopped
     stop_grace_period: 10s
   client:
@@ -14,3 +17,5 @@ services:
     depends_on:
       - server
     restart: unless-stopped
+volumes:
+  office-data:

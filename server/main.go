@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math"
 	"net/http"
@@ -60,6 +59,10 @@ type input struct {
 	Session    string          `json:"session"`
 	SDP        string          `json:"sdp"`
 	Appearance json.RawMessage `json:"appearance"`
+	Token      string          `json:"token"`
+	Desk       *int            `json:"desk"`
+	Style      json.RawMessage `json:"style"`
+	Note       string          `json:"note"`
 }
 
 type appearance struct {
@@ -148,6 +151,10 @@ type peer struct {
 	signalCount       int
 	cameraSignalStart time.Time
 	cameraSignalCount int
+	tokenHash         string
+	deskWindow        time.Time
+	deskCount         int
+	lastNote          time.Time
 }
 
 func (p *peer) stop() {
@@ -164,12 +171,20 @@ type command struct {
 }
 
 type hub struct {
-	commands chan command
-	peers    map[*peer]bool
+	commands  chan command
+	peers     map[*peer]bool
+	desks     [len(deskPositions)]*desk
+	desksPath string
 }
 
 func newHub() *hub {
 	return &hub{commands: make(chan command, 128), peers: make(map[*peer]bool)}
+}
+
+func (h *hub) saveDesks() {
+	if err := saveDesks(h.desksPath, h.desks); err != nil {
+		log.Printf("desks: save failed: %v", err)
+	}
 }
 
 func clean(s string, max int) string {
@@ -303,11 +318,13 @@ func validGIFURL(value string) bool {
 
 func (h *hub) handle(c command, now time.Time) {
 	p, m := c.peer, c.input
-	fmt.Println("peer", c.peer.player)
 	if c.leave {
 		if h.peers[p] {
 			delete(h.peers, p)
 			h.broadcast(map[string]any{"type": "leave", "id": p.player.ID})
+			if h.ownedDesk(p.tokenHash) >= 0 {
+				h.broadcastDesks() // The owner's status light may turn offline.
+			}
 		}
 		return
 	}
@@ -330,18 +347,30 @@ func (h *hub) handle(c command, now time.Time) {
 			p.player.Appearance = selected
 		}
 		p.player.Color = p.player.Appearance.TopColor
+		if validToken(m.Token) {
+			p.tokenHash = hashToken(m.Token)
+		}
 		p.lastMove = now
 		p.joined = true
 		h.peers[p] = true
 		h.send(p, map[string]any{"type": "welcome", "id": p.player.ID, "players": h.players()})
 		h.broadcast(map[string]any{"type": "join", "player": p.player})
+		if h.ownedDesk(p.tokenHash) >= 0 {
+			h.broadcastDesks() // The owner's status light comes back online.
+		} else {
+			h.send(p, h.desksFor(p))
+		}
 		return
 	}
 	if !h.peers[p] {
 		return
 	}
-	fmt.Println("m.type", m.Type)
 	switch m.Type {
+	case "desk-claim", "desk-release", "desk-update", "desk-note", "desk-note-remove":
+		if h.handleDesk(p, m, now) {
+			h.saveDesks()
+			h.broadcastDesks()
+		}
 	case "appearance":
 		if selected, valid := parseAppearance(m.Appearance); valid {
 			p.player.Appearance = selected
@@ -543,6 +572,8 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	h := newHub()
+	h.desksPath = os.Getenv("DESKS_FILE")
+	h.desks = loadDesks(h.desksPath)
 	go h.run(ctx)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) { h.serve(ctx, w, r) })

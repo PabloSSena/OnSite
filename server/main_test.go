@@ -279,7 +279,7 @@ func TestVoiceConsentAndReconnect(t *testing.T) {
 		t.Fatal("reconnection must not inherit consent")
 	}
 	h.handle(command{peer: p, input: input{Type: "signal", To: "new", Kind: "ice", Data: json.RawMessage("null")}}, now)
-	if len(fresh.send) != 2 {
+	if len(fresh.send) != 3 { // welcome, join, and desks
 		t.Fatal("departed sender must not route signals")
 	}
 }
