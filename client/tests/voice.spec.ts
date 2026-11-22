@@ -1,4 +1,5 @@
 import { test as base, expect, chromium, type BrowserContext, type Page } from '@playwright/test'
+import { openMenu } from './helpers'
 
 type VoiceProbe = {
   __voicePCs: RTCPeerConnection[]
@@ -8,6 +9,7 @@ type VoiceProbe = {
   __voiceSockets: WebSocket[]
   __voiceDelayNext: boolean
   __voiceRelease?: () => void
+  __voiceContexts: AudioContext[]
 }
 
 const test = base.extend<{ voiceContext: BrowserContext }>({
@@ -34,6 +36,14 @@ const test = base.extend<{ voiceContext: BrowserContext }>({
         probe.__voiceDenyNext = false
         probe.__voiceSockets = []
         probe.__voiceDelayNext = false
+        probe.__voiceContexts = []
+        window.AudioContext = new Proxy(window.AudioContext, {
+          construct(target, args) {
+            const context = Reflect.construct(target, args) as AudioContext
+            probe.__voiceContexts.push(context)
+            return context
+          },
+        })
         window.WebSocket = new Proxy(window.WebSocket, {
           construct(target, args) {
             const socket = Reflect.construct(target, args) as WebSocket
@@ -74,11 +84,78 @@ const test = base.extend<{ voiceContext: BrowserContext }>({
 const check = expect.configure({ timeout: 15000 })
 const poll = { timeout: 15000 }
 
+test('speech activity reaches non-voice viewers and stops on silence, mute, and leaving', async ({ voiceContext }, testInfo) => {
+  test.setTimeout(180000)
+  const speaker = await voiceContext.newPage()
+  const viewer = await voiceContext.newPage()
+  let level = 0
+  const samples: number[] = []
+  viewer.on('websocket', socket => socket.on('framereceived', frame => {
+    const message = JSON.parse(frame.payload.toString())
+    const player = message.players?.find((p: { name: string }) => p.name === 'Speaker')
+    if (player) level = player.speaking
+  }))
+  speaker.on('websocket', socket => socket.on('framesent', frame => {
+    const message = JSON.parse(frame.payload.toString())
+    if (message.type === 'move') samples.push(message.speaking)
+  }))
+  await joinRoom(speaker, 'Speaker')
+  await joinRoom(viewer, 'Silent viewer')
+  // A steady Web Audio tone gives deterministic speech/silence; Chromium's
+  // fake microphone contains long quiet sections that are unsuitable here.
+  await speaker.evaluate(() => {
+    const probe = window as unknown as VoiceProbe & { __toneGain: GainNode; __toneContext: AudioContext }
+    navigator.mediaDevices.getUserMedia = async () => {
+      probe.__voiceRequests++
+      const context = new AudioContext()
+      probe.__toneContext = context
+      const oscillator = context.createOscillator()
+      const gain = context.createGain()
+      const destination = context.createMediaStreamDestination()
+      oscillator.frequency.value = 220
+      gain.gain.value = 0.2
+      oscillator.connect(gain).connect(destination)
+      oscillator.start()
+      await context.resume()
+      probe.__toneGain = gain
+      probe.__voiceStreams.push(destination.stream)
+      return destination.stream
+    }
+  })
+  expect(level).toBe(0)
+  await joinVoice(speaker)
+  await check.poll(() => level, poll).toBeGreaterThan(0)
+  expect(await viewer.evaluate(() => (window as unknown as VoiceProbe).__voiceRequests)).toBe(0)
+  await speaker.getByRole('button', { name: 'First-person view' }).click()
+  await speaker.screenshot({ path: testInfo.outputPath('speaking-avatar.png') })
+
+  // Silence the source without changing consent or disabling capture.
+  await speaker.evaluate(() => {
+    (window as unknown as { __toneGain: GainNode }).__toneGain.gain.value = 0
+  })
+  await check.poll(() => level, poll).toBe(0)
+  await speaker.evaluate(() => {
+    (window as unknown as { __toneGain: GainNode }).__toneGain.gain.value = 0.2
+  })
+  await check.poll(() => level, poll).toBeGreaterThan(0)
+  await speaker.getByRole('button', { name: 'Mute microphone', exact: true }).click()
+  await check.poll(() => level, poll).toBe(0)
+  await speaker.getByRole('button', { name: 'Unmute microphone', exact: true }).click()
+  await check.poll(() => level, poll).toBeGreaterThan(0)
+  await speaker.getByRole('button', { name: 'Leave voice', exact: true }).click()
+  await speaker.evaluate(() => (window as unknown as { __toneContext: AudioContext }).__toneContext.close())
+  await check.poll(() => level, poll).toBe(0)
+  await check.poll(() => speaker.evaluate(() => (window as unknown as VoiceProbe).__voiceContexts
+    .every(context => context.state === 'closed')), poll).toBe(true)
+  expect(samples.every(value => Number.isFinite(value) && value >= 0 && value <= 1)).toBe(true)
+})
+
 async function joinRoom(page: Page, name: string) {
   await page.goto('/')
   await page.getByLabel('What should we call you?').fill(name)
   await page.getByRole('button', { name: 'Join the office' }).click()
   await check(page.locator('.presence')).toContainText('Live')
+  await openMenu(page)
   await check(page.locator('.voice-status')).toHaveText(/^Voice: off$/)
   expect(await page.evaluate(() => (window as unknown as VoiceProbe).__voiceRequests)).toBe(0)
   expect(await page.evaluate(() => (window as unknown as VoiceProbe).__voicePCs.length)).toBe(0)
@@ -86,6 +163,7 @@ async function joinRoom(page: Page, name: string) {
 
 async function joinVoice(page: Page) {
   await page.bringToFront()
+  await openMenu(page)
   await page.getByRole('button', { name: 'Join voice', exact: true }).click()
   await check(page.getByRole('button', { name: 'Mute microphone', exact: true })).toBeVisible()
 }

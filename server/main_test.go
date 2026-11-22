@@ -93,6 +93,13 @@ func TestMovementBoundary(t *testing.T) {
 		{"punch NaN", input{Punch: math.NaN()}, false},
 		{"punch positive infinity", input{Punch: math.Inf(1)}, false},
 		{"punch negative infinity", input{Punch: math.Inf(-1)}, false},
+		{"both arms upper bounds", input{Punch: 0.32, PunchLeft: 0.32}, true},
+		{"left only", input{PunchLeft: 0.32}, true},
+		{"negative left punch", input{PunchLeft: -0.01}, false},
+		{"left punch above limit", input{PunchLeft: 0.33}, false},
+		{"left punch NaN", input{PunchLeft: math.NaN()}, false},
+		{"left punch positive infinity", input{PunchLeft: math.Inf(1)}, false},
+		{"left punch negative infinity", input{PunchLeft: math.Inf(-1)}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := validMove(p, tc.move, now); got != tc.want {
@@ -114,17 +121,18 @@ func TestJumpAndPunchStorageAndCorrection(t *testing.T) {
 		player: player{ID: "jumper"}, lastMove: now.Add(-50 * time.Millisecond),
 	}
 	h.peers[p] = true
-	h.handle(command{peer: p, input: input{Type: "move", Y: 0.8, Punch: 0.24}}, now)
-	if p.player.Y != 0.8 || p.player.Punch != 0.24 {
+	h.handle(command{peer: p, input: input{Type: "move", Y: 0.8, Punch: 0.24, PunchLeft: 0.16}}, now)
+	if p.player.Y != 0.8 || p.player.Punch != 0.24 || p.player.PunchLeft != 0.16 {
 		t.Fatalf("jump and punch not stored: %+v", p.player)
 	}
-	if got := h.players(); len(got) != 1 || got[0].Y != 0.8 || got[0].Punch != 0.24 {
+	if got := h.players(); len(got) != 1 || got[0].Y != 0.8 || got[0].Punch != 0.24 || got[0].PunchLeft != 0.16 {
 		t.Fatalf("snapshot state lost jump or punch: %+v", got)
 	}
 	accepted := p.player
 	for i, move := range []input{
 		{Type: "move", Y: 3.6},
 		{Type: "move", Punch: 0.33},
+		{Type: "move", PunchLeft: 0.33},
 	} {
 		h.handle(command{peer: p, input: move}, now.Add(time.Duration(i+1)*50*time.Millisecond))
 		if p.player != accepted {
@@ -150,9 +158,16 @@ func TestJumpAndPunchStorageAndCorrection(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"type":"move","x":0,"z":0,"rotation":0,"animation":"idle"}`), &legacy); err != nil {
 		t.Fatal(err)
 	}
-	h.handle(command{peer: p, input: legacy}, now.Add(150*time.Millisecond))
-	if p.player.Y != 0 || p.player.Punch != 0 {
+	h.handle(command{peer: p, input: legacy}, now.Add(200*time.Millisecond))
+	if p.player.Y != 0 || p.player.Punch != 0 || p.player.PunchLeft != 0 {
 		t.Fatalf("omitted fields must default to zero: %+v", p.player)
+	}
+	if err := json.Unmarshal([]byte(`{"type":"move","punch":0.2}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	h.handle(command{peer: p, input: legacy}, now.Add(250*time.Millisecond))
+	if p.player.Punch != 0.2 || p.player.PunchLeft != 0 {
+		t.Fatalf("legacy punch must remain right-arm only: %+v", p.player)
 	}
 }
 

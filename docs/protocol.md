@@ -5,8 +5,11 @@ First message within 10 seconds: `{"type":"join","name":"Ana"}`.
 The server assigns an ID and color; names have up to 24 characters. No authentication.
 
 Client → server:
-- `join`: `name`.
-- `move`: `x`, `z`, `rotation` (radians around Y), `animation` (`idle` or `walk`), at 20 Hz. Optional `y` (height above the floor, 0–3.5) and `punch` (remaining animation seconds, 0–0.32) default to zero when omitted.
+- `join`: `name`, optional complete `appearance`. Missing/invalid appearance uses a default outfit.
+- `appearance`: complete `appearance` object. Valid changes update only the sender's
+  appearance and legacy `color` (the top color), then broadcast an immediate snapshot.
+  Invalid updates are ignored without partially changing the outfit.
+- `move`: `x`, `z`, `rotation` (radians around Y), `animation` (`idle` or `walk`), at 20 Hz. Optional `y` (height above the floor, 0–3.5), `punch` (RIGHT arm remaining animation seconds, 0–0.32), `punchLeft` (LEFT arm remaining animation seconds, 0–0.32), and `speaking` (normalized microphone amplitude, 0–1) default to zero when omitted. The legacy `punch` name retains its right-arm meaning. Nonfinite/out-of-range speech values reject the move; accepted speech levels are forced to zero unless voice consent is enabled.
 - `chat`: `text`, up to 300 characters. At most one accepted message every 400 ms.
 - `voice`: `enabled` (boolean). Explicit opt-in; published through the next snapshot.
 - `signal`: `to` (current player ID), `kind` (`offer`, `answer`, or `ice`), `data` (described below). Only relayed when both players have voice enabled and the target is a different player currently in the room.
@@ -36,8 +39,28 @@ Server → client:
 - `camera-signal`: `from` (server-assigned sender ID), `session`, `kind`, `sdp`.
   Only delivered to the specified recipient through its bounded writer queue.
 
-`Player`: `{id, name, color, x, y, z, punch, rotation, animation, voice, camera}`.
-Spawn: `(x: 0, y: 0, z: 6)`, on the porch outside the office, with `punch: 0`, `voice: false`, and `camera: false`. Y is feet height above the ground; avatars face -Z.
+`Player`: `{id, name, color, appearance, x, y, z, punch, punchLeft, speaking, rotation, animation, voice, camera}`.
+
+### Appearance
+
+Exactly 14 fields, at most 1,024 JSON bytes:
+
+- `top`: `tee`, `hoodie`, or `jacket`.
+- `bottom`: `trousers` or `shorts`; `shoes`: `boots` or `sneakers`.
+- `hair`: `short`, `bob`, or `none`; `hat`: `none`, `beanie`, or `cap`.
+- `face`: `smile`, `neutral`, or `surprised`; `backpack`: boolean.
+- `topColor`, `bottomColor`, `shoeColor`, `hatColor`, `backpackColor`: one of
+  `#52d6b1`, `#ffb86b`, `#b69cff`, `#72baff`, `#ff7c9a`, `#25333e`, `#fff0d3`, `#b58453`.
+- `skin`: one of `#f7dfcf`, `#efc9a9`, `#d9a47c`, `#b97953`, `#885438`, `#533528`.
+- `hairColor`: one of `#a65d45`, `#25333e`, `#51382c`, `#805539`, `#d5b477`, `#c4c5c3`.
+
+Missing, null, unknown, mistyped, or out-of-palette fields are rejected. No assets,
+URLs, custom HTML, or arbitrary colors are accepted. The client stores the look
+under `office-appearance-v1` in local storage, validates it on loading, and includes
+the latest in-memory selection on every join/reconnect. No server persistence.
+
+### Movement and world
+Spawn: `(x: 0, y: 0, z: 6)`, on the porch outside the office, with `punch: 0`, `punchLeft: 0`, `speaking: 0`, `voice: false`, and `camera: false`. Y is feet height above the ground; avatars face -Z.
 Map bounds: `-23.5 <= x, z <= 23.5` (checked by both client and server).
 The office occupies x `[-16, 16]`, z `[-16, 4]`; a four-unit-wide open entrance
 at x `[-2, 2]`, z `4` connects its central hallway to the garden courtyard.
@@ -45,8 +68,9 @@ Snapshots replace the remote player map. Local movement is immediate; remote
 avatars use exponential position smoothing and rotation slerp. There is no
 timestamped snapshot buffer yet; adding one is a useful exercise for handling jitter.
 
-The server checks map bounds, horizontal speed with tolerance, finite values, and the `y`/`punch` ranges above. Invalid moves return the existing accepted player state through `correction`.
+The server checks map bounds, horizontal speed with tolerance, finite values, and the `y`/`punch`/`punchLeft` ranges above. Invalid moves return the existing accepted player state (including both arms) through `correction`.
 Jump physics and punch timing are client-side; these fields synchronize visual state, not combat or authoritative vertical physics.
+Left mouse punches left; right mouse punches right. Each arm has an independent 0.45-second cooldown and both can animate simultaneously. Non-repeating F presses alternate arms, starting left. In first person only captured mouse input punches; the initial left click only captures the pointer, and right click never captures it. Only the game canvas suppresses the context menu. Focused inputs/buttons ignore game actions; blur, visibility, pointer-lock, and view changes clear pending actions.
 Wall and furniture collision uses full 3D client-side bounds, including vertical contact; this is **not** an authoritative simulation.
 The external world limits remain x/z ±23.5 at every height. The feet-height cap of 3.5 is an artificial movement limit, not a derived wall-top height; jumping from elevated surfaces does not raise it, and moves above it receive a correction.
 Chat uses connection identity and renders text through React, never HTML.
@@ -59,6 +83,20 @@ No persisted history; the latest 100 messages live only in the tab.
 A full room or invalid handshake closes the connection; the UI retries until the user leaves.
 
 ## Opt-in WebRTC signaling
+
+### Speech animation
+
+After explicit microphone opt-in, a local Web Audio analyser measures short RMS
+windows without connecting the mic to speaker output. A noise gate suppresses
+low-level input; normalized amplitude rides existing movement packets so even
+viewers who have not joined voice can see mouth motion. This cosmetic value is
+not proof of speech and can be spoofed by a voice-enabled client.
+No audio samples or recordings are sent to Go. Mouth opening uses frame-rate-aware
+smoothing, returning to the chosen face when silent, muted, or voice is off.
+Snapshots clear activity if no accepted movement has arrived for one second,
+preventing background/suspended renderers from leaving a mouth stuck open.
+The analyser is released with voice capture; a failed/suspended analyser leaves
+normal voice functional but mouth activity zero until it can resume.
 
 Offer/answer `data` is `{type: "offer" | "answer", sdp: string}`, with `type` matching `kind` and SDP at most 16,000 UTF-8 bytes. ICE `data` is either `null` (end of candidates) or `{candidate: string, sdpMid?: string | null, sdpMLineIndex?: number | null, usernameFragment?: string | null}`. Candidate strings are at most 4,096 UTF-8 bytes; optional strings are at most 256 UTF-8 bytes; the optional media-line index is an integer from 0 to 65,535. Unknown data fields, malformed shapes, unknown kinds, and invalid routes are silently ignored.
 

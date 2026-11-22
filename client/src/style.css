@@ -10,11 +10,14 @@ button:disabled { opacity: .5; cursor: default; }
 input { width: 100%; min-width: 0; border: 1px solid #ffffff25; border-radius: 9px; background: #0d1723; color: #fff; padding: 12px; outline: none; }
 input:focus { border-color: #65dfbb; }
 button:focus-visible { outline: 2px solid #65dfbb; outline-offset: 3px; }
-.hud { position: absolute; inset: 20px 24px auto; display: flex; align-items: center; gap: 20px; padding: 15px 20px; background: #111b27ed; border: 1px solid #ffffff15; border-radius: 14px; box-shadow: 0 8px 32px #10203220; }
-.hud strong { font-size: 24px; letter-spacing: -1px; }
-.brand-dot { display: inline-block; height: 12px; width: 12px; border-radius: 4px; background: #65dfbb; margin-right: 10px; }
-.subtitle { color: #9aafbd; font-size: 13px; margin-left: 20px; }
-.presence { margin-left: auto; font-size: 12px; color: #a6b8c6; }
+.game-menu { position: absolute; left: 24px; top: 20px; width: min(350px, calc(100vw - 48px)); }
+.menu-toggle { background: #111b27ed; box-shadow: 0 8px 32px #10203220; }
+.menu-toggle span { font-size: 10px; margin-right: 6px; }
+.game-menu-panel { margin-top: 10px; padding: 14px; max-height: calc(100dvh - 100px); overflow-y: auto; }
+.game-menu-panel .panel { background: transparent; border: 0; box-shadow: none; border-radius: 0; }
+.game-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.game-actions button { font-size: 12px; }
+.presence { margin-bottom: 12px; font-size: 12px; color: #a6b8c6; }
 .live { color: #65dfbb; }
 .count { border-left: 1px solid #ffffff25; padding-left: 15px; margin-left: 15px; }
 .help { position: absolute; left: 24px; bottom: 24px; background: #111b27e8; padding: 12px 16px; border-radius: 10px; font-size: 12px; color: #b5c4ce; }
@@ -44,8 +47,7 @@ h1 { font-size: 40px; line-height: 1.08; letter-spacing: -1.5px; margin: 18px 0;
 .chat button { background: #65dfbb; color: #112b22; }
 .nametag { white-space: nowrap; color: #fff; font-size: 12px; padding: 5px 9px; border-radius: 7px; background: #112132db; user-select: none; }
 .nametag.me { border: 1px solid #65dfbb; }
-.media-panel { position: absolute; left: 24px; top: 110px; width: min(410px, calc(100vw - 48px)); display: flex; flex-direction: column; gap: 12px; }
-.voice { padding: 12px; }
+.voice { padding: 12px 0; margin-top: 12px; border-top: 1px solid #ffffff15; }
 .voice-status { color: #b5c4ce; font-size: 12px; margin-bottom: 8px; }
 .voice-controls { display: flex; gap: 8px; flex-wrap: wrap; }
 .voice-controls button { font-size: 12px; padding: 7px 10px; }
@@ -55,9 +57,8 @@ h1 { font-size: 40px; line-height: 1.08; letter-spacing: -1.5px; margin: 18px 0;
 .gif-bubble { width: 160px; height: 120px; display: grid; place-items: center; overflow: hidden; border: 2px solid #65dfbb; border-radius: 12px; background: #112132; color: #fff; font-size: 12px; box-shadow: 0 4px 16px #0005; }
 .gif-bubble img { display: block; width: 100%; height: 100%; object-fit: contain; }
 @media (max-width: 750px) {
-  .subtitle, .help, .count { display: none; }
-  .hud { inset: 12px 12px auto; padding: 10px; gap: 10px; }
+  .help { display: none; }
+  .game-menu { top: 12px; left: 12px; width: min(350px, calc(100vw - 24px)); }
   .chat { right: 12px; bottom: 12px; width: min(310px, calc(100vw - 24px)); }
   .messages { height: 130px; }
-  .media-panel { top: 90px; left: 12px; width: calc(100vw - 24px); }
 }

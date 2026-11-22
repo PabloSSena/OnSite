@@ -6,6 +6,8 @@ import { stepPhysics } from './world'
 import WallMirror from './Mirror'
 import Avatar, { FirstPersonFists } from './Avatar'
 import { OfficeWorld } from './OfficeWorld'
+import WorldCameras from './WorldCameras'
+import { localSpeechLevel } from './voice'
 
 export type ViewMode = 'third-person' | 'first-person'
 
@@ -13,7 +15,7 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
   const keys = useRef(new Set<string>())
   const elapsed = useRef(0)
   const look = useRef({ yaw: 0, pitch: 0 })
-  const actions = useRef({ jump: false, punch: false, velocity: 0, cooldown: 0 })
+  const actions = useRef({ jump: false, left: false, right: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 })
   const id = useNetwork(s => s.id)
   const { camera, gl } = useThree()
   const math = useRef({
@@ -21,24 +23,32 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
     ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 8, 10),
   })
   useEffect(() => {
-    actions.current = { jump: false, punch: false, velocity: 0, cooldown: 0 }
+    actions.current = { jump: false, left: false, right: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 }
   }, [id])
   useEffect(() => {
     const punch = (e: PointerEvent) => {
-      if (e.button === 0 && (viewMode === 'third-person' || document.pointerLockElement === gl.domElement)) {
-        actions.current.punch = true
+      if (document.querySelector('dialog[open]') || document.activeElement?.closest('input, textarea, select, button, [contenteditable="true"]')) return
+      if (viewMode === 'third-person' || document.pointerLockElement === gl.domElement) {
+        if (e.button === 0) actions.current.left = true
+        if (e.button === 2) actions.current.right = true
       }
     }
+    const contextMenu = (e: MouseEvent) => e.preventDefault()
     gl.domElement.addEventListener('pointerdown', punch)
-    return () => gl.domElement.removeEventListener('pointerdown', punch)
+    gl.domElement.addEventListener('contextmenu', contextMenu)
+    return () => {
+      gl.domElement.removeEventListener('pointerdown', punch)
+      gl.domElement.removeEventListener('contextmenu', contextMenu)
+    }
   }, [viewMode, gl])
   useEffect(() => {
     keys.current.clear()
-    actions.current.jump = actions.current.punch = false
+    actions.current.jump = actions.current.left = actions.current.right = false
     if (viewMode !== 'first-person') return
     const canvas = gl.domElement
     look.current = { yaw: localPlayer.rotation, pitch: 0 }
-    const lock = () => {
+    const lock = (e: MouseEvent) => {
+      if (e.button !== 0 || document.activeElement?.closest('input, textarea, button, [contenteditable="true"]')) return
       if (useNetwork.getState().status !== 'online' || document.pointerLockElement === canvas) return
       // A denied request must not leave an unhandled promise rejection.
       canvas.requestPointerLock()?.catch(() => {})
@@ -50,7 +60,7 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
     }
     const clear = () => {
       keys.current.clear()
-      actions.current.jump = actions.current.punch = false
+      actions.current.jump = actions.current.left = actions.current.right = false
     }
     const escape = (e: KeyboardEvent) => {
       if (e.code === 'Escape' && document.pointerLockElement === canvas) {
@@ -72,12 +82,17 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
   }, [viewMode, gl])
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest('input, textarea, button, [contenteditable="true"]')) return
+      if (document.querySelector('dialog[open]') || (e.target as HTMLElement).closest('input, textarea, select, button, [contenteditable="true"]')) return
       if (e.code === 'Space' || e.code === 'KeyF') {
         e.preventDefault()
         if (!e.repeat) {
           if (e.code === 'Space') actions.current.jump = true
-          else actions.current.punch = true
+          else {
+            const action = actions.current
+            if (action.nextLeft) action.left = true
+            else action.right = true
+            action.nextLeft = !action.nextLeft
+          }
         }
       }
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
@@ -88,7 +103,7 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
     const up = (e: KeyboardEvent) => keys.current.delete(e.code)
     const clear = () => {
       keys.current.clear()
-      actions.current.jump = actions.current.punch = false
+      actions.current.jump = actions.current.left = actions.current.right = false
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -120,16 +135,23 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
     }
     const moving = Math.hypot(dx, dz)
     const online = useNetwork.getState().status === 'online'
+    localPlayer.speaking = online ? localSpeechLevel() : 0
     const active = online && (viewMode === 'third-person' || document.pointerLockElement === gl.domElement)
     const action = actions.current
-    action.cooldown = Math.max(0, action.cooldown - dt)
+    action.leftCooldown = Math.max(0, action.leftCooldown - dt)
+    action.rightCooldown = Math.max(0, action.rightCooldown - dt)
+    localPlayer.punchLeft = Math.max(0, localPlayer.punchLeft - dt)
     localPlayer.punch = Math.max(0, localPlayer.punch - dt)
     const jump = active && action.jump
-    if (active && action.punch && action.cooldown === 0) {
-      localPlayer.punch = 0.32
-      action.cooldown = 0.45
+    if (active && action.left && action.leftCooldown === 0) {
+      localPlayer.punchLeft = 0.32
+      action.leftCooldown = 0.45
     }
-    action.jump = action.punch = false
+    if (active && action.right && action.rightCooldown === 0) {
+      localPlayer.punch = 0.32
+      action.rightCooldown = 0.45
+    }
+    action.jump = action.left = action.right = false
     if (moving && online) {
       dx /= moving
       dz /= moving
@@ -145,7 +167,7 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
       localPlayer.z = next.z
       action.velocity = next.velocity
     } else {
-      localPlayer.y = localPlayer.punch = action.velocity = 0
+      localPlayer.y = localPlayer.punch = localPlayer.punchLeft = action.velocity = 0
     }
     if (viewMode === 'first-person' && online) localPlayer.rotation = look.current.yaw
     localPlayer.animation = moving && online ? 'walk' : 'idle'
@@ -179,6 +201,8 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
 }
 
 function Scene({ viewMode }: { viewMode: ViewMode }) {
+  // Mount DOM annotations only after Canvas has its final event/portal target.
+  const connected = useThree(s => s.events.connected)
   const players = useNetwork(s => s.players)
   const id = useNetwork(s => s.id)
   const obstacles = useRef<THREE.Group>(null)
@@ -193,8 +217,9 @@ function Scene({ viewMode }: { viewMode: ViewMode }) {
       <OfficeWorld obstacles={obstacles} />
       <WallMirror />
       <Controller obstacles={obstacles} viewMode={viewMode} />
-      {Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id}
+      {connected && Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id}
         firstPerson={p.id === id && viewMode === 'first-person'} />)}
+      <WorldCameras viewMode={viewMode} />
       {id && viewMode === 'first-person' && <FirstPersonFists />}
     </>
   )

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { openMenu } from './helpers'
 
 test.use({
   launchOptions: {
@@ -16,6 +17,7 @@ async function join(page: Page, name: string) {
   await page.getByLabel('What should we call you?').fill(name)
   await page.getByRole('button', { name: 'Join the office' }).click()
   await expect(page.locator('.presence')).toContainText('Live')
+  await openMenu(page)
 }
 
 async function playing(page: Page, name: string) {
@@ -56,8 +58,13 @@ test('webcam reaches late viewers, supports simultaneous cameras, toggling, and 
   await expect(ana.locator('video')).toHaveCount(0)
   await ana.getByRole('button', { name: 'Turn camera on', exact: true }).click()
   await playing(ana, 'You')
+  await playing(ana, 'Local camera source')
+  await expect(ana.locator('video')).toHaveCount(2)
+  await expect(ana.getByLabel('Local camera source', { exact: true })).toBeHidden()
   await join(bia, 'Bia')
   await playing(bia, 'Ana')
+  await expect(bia.locator('video[data-world-camera]')).toHaveCount(1)
+  await expect(bia.getByLabel('Ana', { exact: true })).toBeHidden()
   await expect(bia.getByRole('button', { name: 'Turn camera on', exact: true })).toBeVisible()
   await bia.getByRole('button', { name: 'Turn camera on', exact: true }).click()
   await playing(ana, 'Bia')
@@ -72,12 +79,14 @@ test('webcam reaches late viewers, supports simultaneous cameras, toggling, and 
   await ana.getByRole('button', { name: 'Turn camera on', exact: true }).click()
   await playing(bia, 'Ana')
   await ana.getByRole('button', { name: 'Leave', exact: true }).click()
+  await expect(ana.locator('video')).toHaveCount(0)
   await expect(bia.getByLabel('Ana', { exact: true })).toHaveCount(0)
   expect(await ana.evaluate(() => (
     window as unknown as { capturedStreams: MediaStream[] }
   ).capturedStreams.every(stream => stream.getTracks().every(track => track.readyState === 'ended')))).toBe(true)
   await ana.getByRole('button', { name: 'Join the office' }).click()
   await expect(ana.locator('.presence')).toContainText('Live')
+  await openMenu(ana)
   await expect(ana.getByRole('button', { name: 'Turn camera on', exact: true })).toBeVisible()
   await playing(ana, 'Bia')
   await ana.getByRole('button', { name: 'Turn camera on', exact: true }).click()

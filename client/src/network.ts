@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { validGIFURL } from './gif'
+import { loadAppearance, parseAppearance, type Appearance } from './appearance'
 
 export type Player = {
   id: string
@@ -9,10 +10,13 @@ export type Player = {
   y: number
   z: number
   punch: number
+  punchLeft: number
   rotation: number
   animation: 'idle' | 'walk'
   voice: boolean
+  speaking: number
   camera: boolean
+  appearance: Appearance
 }
 export type VideoSignal = { type: 'camera-signal'; from: string; session: string; kind: 'offer' | 'answer'; sdp: string }
 const videoSignalListeners = new Set<(signal: VideoSignal) => void>()
@@ -53,7 +57,7 @@ export const useNetwork = create<State>(() => ({
 }))
 
 // Mutable local simulation: no React re-render on every animation frame.
-export const localPlayer = { x: 0, y: 0, z: 6, punch: 0, rotation: 0, animation: 'idle' as 'idle' | 'walk' }
+export const localPlayer = { x: 0, y: 0, z: 6, punch: 0, punchLeft: 0, speaking: 0, rotation: 0, animation: 'idle' as 'idle' | 'walk' }
 let socket: WebSocket | null = null
 
 export function send(message: object) {
@@ -62,7 +66,7 @@ export function send(message: object) {
   }
 }
 
-export function connect(name: string): () => void {
+export function connect(name: string, getAppearance?: () => Appearance): () => void {
   let stopped = false
   let retry: ReturnType<typeof setTimeout> | undefined
   let attempt = 0
@@ -72,7 +76,10 @@ export function connect(name: string): () => void {
     useNetwork.setState({ status: attempt ? 'reconnecting' : 'connecting' })
     const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`)
     socket = current = ws
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'join', name }))
+    ws.onopen = () => {
+      const appearance = parseAppearance(getAppearance ? getAppearance() : loadAppearance()) ?? loadAppearance()
+      ws.send(JSON.stringify({ type: 'join', name, appearance }))
+    }
     ws.onmessage = (event) => {
       if (stopped) return
       let msg: ServerMessage
@@ -88,7 +95,7 @@ export function connect(name: string): () => void {
         case 'welcome': {
           attempt = 0
           const me = msg.players.find(p => p.id === msg.id)
-          if (me) Object.assign(localPlayer, me)
+          if (me) Object.assign(localPlayer, me, { punchLeft: me.punchLeft ?? 0 })
           useNetwork.setState({
             id: msg.id, status: 'online',
             players: Object.fromEntries(msg.players.map(p => [p.id, p])),
@@ -112,7 +119,7 @@ export function connect(name: string): () => void {
           })
           break
         case 'correction':
-          Object.assign(localPlayer, msg.player)
+          Object.assign(localPlayer, msg.player, { punchLeft: msg.player.punchLeft ?? 0 })
           break
         case 'chat':
           useNetwork.setState(s => ({ chats: [...s.chats.slice(-99), msg] }))

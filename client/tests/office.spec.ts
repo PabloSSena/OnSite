@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openMenu } from './helpers'
 
 test('first-person supports mouse look, relative movement, collision, chat, and switching back', async ({ page }) => {
   const errors: string[] = []
@@ -12,6 +13,7 @@ test('first-person supports mouse look, relative movement, collision, chat, and 
   await page.getByLabel('What should we call you?').fill('Camera tester')
   await page.getByRole('button', { name: 'Join the office' }).click()
   await expect(page.locator('.presence')).toContainText('Live')
+  await openMenu(page)
   const toggle = page.getByRole('button', { name: 'First-person view' })
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.nametag.me')).toHaveCount(0)
@@ -44,6 +46,7 @@ test('first-person supports mouse look, relative movement, collision, chat, and 
   await page.getByRole('textbox', { name: 'Message' }).fill('First-person works!')
   await page.getByRole('textbox', { name: 'Message' }).press('Enter')
   await expect(page.getByRole('log')).toContainText('First-person works!')
+  await openMenu(page)
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
   await expect(page.locator('.nametag.me')).toHaveCount(1)
@@ -66,6 +69,7 @@ test('two tabs render movement, exchange chat messages, and remove players who l
     await page.getByLabel('What should we call you?').fill(name)
     await page.getByRole('button', { name: 'Join the office' }).click()
     await expect(page.locator('.presence')).toContainText('Live')
+    await openMenu(page)
     await page.getByRole('button', { name: 'First-person view' }).click()
   }
   await expect(bia.locator('.nametag')).toHaveCount(2)
@@ -89,6 +93,7 @@ test('two tabs render movement, exchange chat messages, and remove players who l
   await expect(bia.getByRole('log')).toContainText('wasd: hi, Bia!')
   await expect(ana.getByRole('log')).toContainText('wasd: hi, Bia!')
   await bia.screenshot({ path: 'test-results/office.png' })
+  await openMenu(ana)
   await ana.getByRole('button', { name: 'Leave', exact: true }).click()
   await expect(bia.locator('.nametag')).toHaveCount(1)
   expect(errors).toEqual([])

@@ -1,0 +1,30 @@
+.join-layout { width: min(1060px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; display: grid; grid-template-columns: 300px 1fr; }
+.join-layout .join { width: auto; padding: 28px; align-self: center; }
+.appearance-editor { display: grid; grid-template-columns: minmax(130px, 0.8fr) minmax(240px, 1.2fr); gap: 16px; padding: 20px; }
+.character-preview { height: 250px; background: radial-gradient(ellipse, #304a47, #15232d); border-radius: 14px; overflow: hidden; }
+.appearance-preview p { text-align: center; color: #65dfbb; font-size: 14px; }
+.appearance-preview small { color: #a6b8c6; font-size: 11px; }
+.appearance-selects { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.appearance-select { flex: 1; min-width: 70px; font-size: 11px; color: #b5c4ce; }
+.appearance-select select { display: block; width: 100%; margin-top: 5px; padding: 7px 3px; background: #0d1723; color: #eaf0f5; border: 1px solid #ffffff25; border-radius: 6px; }
+.appearance-palette { border: 0; padding: 0; margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+.appearance-palette legend { font-size: 11px; color: #b5c4ce; margin-bottom: 7px; }
+.appearance-palette button { padding: 0; width: 23px; height: 23px; border-radius: 50%; border: 2px solid transparent; }
+.appearance-palette button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; border-color: #111b27; }
+.appearance-backpack { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 12px; }
+.appearance-backpack input { width: auto; }
+.customization-dialog { color: #eaf0f5; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 16px; }
+.customization-dialog::backdrop { background: #07111ec9; }
+.customization-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.customization-title h2 { font-size: 18px; margin: 0; }
+@media (max-width: 800px) {
+  .join-layout { grid-template-columns: 1fr; }
+  .join-layout .join { padding: 20px; }
+  .join-layout h1 { font-size: 26px; margin: 8px 0; }
+  .join-layout .join p { margin: 8px 0 12px; }
+  .join-layout .join small { margin-top: 10px; }
+}
+@media (max-width: 500px) {
+  .appearance-editor { grid-template-columns: 1fr; padding: 12px; }
+  .character-preview { height: 180px; }
+}

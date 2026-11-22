@@ -6,19 +6,26 @@ import { advanceMotion, createMotion, footTarget, legPose, punchExtension } from
 import { localPlayer, useNetwork, type Player } from './network'
 import { supported } from './world'
 import GIFBubble from './GIFBubble'
+import { defaultAppearance } from './appearance'
+import { advanceMouth } from './speechMotion'
 
-const skin = '#efc9a9'
 const ink = '#25333e'
 
-export default function Avatar({ player, local = false, firstPerson = false }: {
-  player: Player; local?: boolean; firstPerson?: boolean
+export default function Avatar({ player, local = false, firstPerson = false, preview = false }: {
+  player: Player; local?: boolean; firstPerson?: boolean; preview?: boolean
 }) {
-  const reaction = useNetwork(s => s.gifs[player.id])
+  const appearance = player.appearance ?? defaultAppearance(player.color)
+  const appearanceKey = JSON.stringify(appearance)
+  const skin = appearance.skin
+  const reaction = useNetwork(s => preview ? undefined : s.gifs[player.id])
   const root = useRef<THREE.Group>(null!)
   const hips = useRef<THREE.Group>(null!)
   const torso = useRef<THREE.Group>(null!)
   const head = useRef<THREE.Group>(null!)
   const eyes = useRef<THREE.Group>(null!)
+  const restingMouth = useRef<THREE.Mesh>(null!)
+  const talkingMouth = useRef<THREE.Mesh>(null!)
+  const mouthLevel = useRef(0)
   const thighs = useRef<(THREE.Group | null)[]>([])
   const knees = useRef<(THREE.Group | null)[]>([])
   const ankles = useRef<(THREE.Group | null)[]>([])
@@ -39,13 +46,21 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
         part?.traverse(object => object.layers.set(0))
       }
     }
-  }, [firstPerson])
+  }, [firstPerson, appearanceKey])
 
   useFrame(({ clock }, delta) => {
     const dt = Math.min(delta, 0.1)
-    const p = local ? localPlayer : (useNetwork.getState().players[player.id] ?? player)
+    const p = preview ? { ...player, animation: 'idle' as const, punch: 0, punchLeft: 0 }
+      : local ? localPlayer : (useNetwork.getState().players[player.id] ?? player)
+    const voiceEnabled = local ? useNetwork.getState().players[player.id]?.voice : player.voice
+    mouthLevel.current = advanceMouth(mouthLevel.current,
+      !preview && voiceEnabled ? p.speaking ?? 0 : 0, delta)
+    const opening = mouthLevel.current
+    restingMouth.current.visible = opening < 0.025
+    talkingMouth.current.visible = opening >= 0.025
+    talkingMouth.current.scale.set(0.042 + opening * 0.012, 0.009 + opening * 0.052, 0.012)
     const alpha = 1 - Math.exp(-14 * dt)
-    if (local) root.current.position.set(p.x, p.y, p.z)
+    if (local || preview) root.current.position.set(p.x, p.y, p.z)
     else {
       root.current.position.x = THREE.MathUtils.lerp(root.current.position.x, p.x, alpha)
       root.current.position.y = THREE.MathUtils.lerp(root.current.position.y, p.y ?? 0, alpha)
@@ -61,9 +76,11 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
     const hipY = 0.58 + Math.abs(Math.sin(state.phase)) * 0.018 * stride + breathing - state.landing * 0.05
     hips.current.position.y = hipY
     const punch = punchExtension(p.punch ?? 0)
-    torso.current.rotation.set(-stride * 0.08 + state.air * 0.06 - punch * 0.05, -punch * 0.12,
+    const punchLeft = punchExtension(p.punchLeft ?? 0)
+    const twist = punch - punchLeft
+    torso.current.rotation.set(-stride * 0.08 + state.air * 0.06 - Math.max(punch, punchLeft) * 0.05, -twist * 0.12,
       Math.cos(state.phase) * stride * 0.025)
-    head.current.rotation.set(Math.sin(clock.elapsedTime * 1.7 + seed) * 0.015, punch * 0.08,
+    head.current.rotation.set(Math.sin(clock.elapsedTime * 1.7 + seed) * 0.015, twist * 0.08,
       -Math.cos(state.phase) * stride * 0.025)
     const blink = (clock.elapsedTime + seed) % 4.6
     eyes.current.scale.y = blink > 4.42 ? 0.12 : 1
@@ -75,7 +92,7 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
       knees.current[i]!.rotation.x = leg.knee
       ankles.current[i]!.rotation.x = leg.ankle
       const swing = Math.cos(state.phase + i * Math.PI) * stride * 0.5 + state.air * 0.4
-      const hit = i === 1 ? punch : 0
+      const hit = i === 1 ? punch : punchLeft
       shoulders.current[i]!.rotation.set(swing * (1 - hit) + hit * 1.55, 0, side * (0.1 + state.air * 0.2))
       elbows.current[i]!.rotation.x = -(0.25 + state.air * 0.35) * (1 - hit)
     }
@@ -86,39 +103,49 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
       <group ref={hips} position={[0, 0.58, 0]}>
         <mesh scale={[1, 0.65, 0.8]} castShadow>
           <sphereGeometry args={[0.22, 10, 8]} />
-          <meshStandardMaterial color={ink} roughness={0.95} flatShading />
+          <meshStandardMaterial color={appearance.bottomColor} roughness={0.95} flatShading />
         </mesh>
         {([-1, 1] as const).map((side, i) => (
           <group key={side} name={side === -1 ? 'left-leg' : 'right-leg'}
             ref={node => { thighs.current[i] = node }} position={[side * 0.125, 0, 0]}>
             <mesh position={[0, -0.13, 0]} castShadow>
               <capsuleGeometry args={[0.09, 0.1, 3, 8]} />
-              <meshStandardMaterial color={ink} roughness={0.95} flatShading />
+              <meshStandardMaterial color={appearance.bottomColor} roughness={0.95} flatShading />
             </mesh>
             <group ref={node => { knees.current[i] = node }} position={[0, -0.26, 0]}>
               <mesh position={[0, -0.13, 0]} castShadow>
                 <capsuleGeometry args={[0.075, 0.11, 3, 8]} />
-                <meshStandardMaterial color={player.color} roughness={0.9} flatShading />
+                <meshStandardMaterial color={appearance.bottom === 'shorts' ? skin : appearance.bottomColor} roughness={0.9} flatShading />
               </mesh>
               <group ref={node => { ankles.current[i] = node }} position={[0, -0.26, 0]}>
-                <mesh position={[0, -0.055, -0.04]} rotation={[Math.PI / 2, 0, 0]} scale={[1, 1, 0.64]} castShadow>
+                {appearance.shoes === 'boots' && <mesh position={[0, 0.01, 0]} castShadow>
+                  <cylinderGeometry args={[0.09, 0.095, 0.14, 8]} />
+                  <meshStandardMaterial color={appearance.shoeColor} roughness={0.9} flatShading />
+                </mesh>}
+                <mesh position={[0, -0.055, -0.04]} rotation={[Math.PI / 2, 0, 0]}
+                  scale={[1, 1, appearance.shoes === 'boots' ? 0.8 : 0.55]} castShadow>
                   <capsuleGeometry args={[0.085, 0.1, 3, 8]} />
-                  <meshStandardMaterial color="#b58453" roughness={1} flatShading />
+                  <meshStandardMaterial color={appearance.shoeColor} roughness={1} flatShading />
                 </mesh>
                 <mesh position={[0, -0.095, -0.04]} castShadow>
                   <boxGeometry args={[0.17, 0.035, 0.27]} />
-                  <meshStandardMaterial color={ink} roughness={1} />
+                  <meshStandardMaterial color={appearance.shoes === 'sneakers' ? '#fff0d3' : ink} roughness={1} />
                 </mesh>
+                {appearance.shoes === 'sneakers' && <mesh position={[0, -0.007, -0.09]}>
+                  <boxGeometry args={[0.085, 0.012, 0.065]} />
+                  <meshStandardMaterial color="#fff0d3" roughness={1} />
+                </mesh>}
               </group>
             </group>
           </group>
         ))}
         <group ref={torso} position={[0, 0.16, 0]}>
           <mesh position={[0, 0.1, 0]} scale={[1, 1, 0.8]} castShadow>
-            <capsuleGeometry args={[0.23, 0.12, 4, 10]} />
-            <meshStandardMaterial color={player.color} roughness={0.85} flatShading />
+            <capsuleGeometry args={[appearance.top === 'hoodie' ? 0.25 : 0.23, 0.12, 4, 10]} />
+            <meshStandardMaterial color={appearance.topColor} roughness={0.85} flatShading />
           </mesh>
-          <mesh position={[0, 0.18, -0.19]}>
+          {appearance.top === 'jacket' && <group>
+          <mesh position={[0, 0.1, -0.195]}>
             <boxGeometry args={[0.035, 0.31, 0.025]} />
             <meshStandardMaterial color="#fff0d3" roughness={0.9} />
           </mesh>
@@ -126,19 +153,75 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
             <boxGeometry args={[0.09, 0.065, 0.025]} />
             <meshStandardMaterial color="#fff0d3" roughness={0.9} />
           </mesh>
-          <mesh position={[0, 0.14, 0.2]} castShadow>
+          {[-1, 1].map(side => <mesh key={side} position={[side * 0.065, 0.27, -0.185]}
+            rotation={[0, 0, side * 0.4]}>
+            <boxGeometry args={[0.065, 0.15, 0.035]} />
+            <meshStandardMaterial color={appearance.topColor} roughness={0.9} flatShading />
+          </mesh>)}
+          </group>}
+          {appearance.top === 'hoodie' && <group>
+            <mesh position={[0, 0.35, 0.105]} scale={[1, 1, 0.7]} castShadow>
+              <torusGeometry args={[0.15, 0.065, 5, 12]} />
+              <meshStandardMaterial color={appearance.topColor} roughness={1} flatShading />
+            </mesh>
+            {[-1, 1].map(side => <mesh key={side} position={[side * 0.065, 0.22, -0.21]}
+              rotation={[0, 0, side * 0.08]}>
+              <cylinderGeometry args={[0.009, 0.009, 0.18, 5]} />
+              <meshStandardMaterial color="#fff0d3" roughness={1} />
+            </mesh>)}
+            <mesh position={[0, -0.005, -0.19]}>
+              <boxGeometry args={[0.24, 0.09, 0.025]} />
+              <meshStandardMaterial color={appearance.topColor} roughness={1} />
+            </mesh>
+          </group>}
+          {appearance.backpack && <mesh position={[0, 0.14, 0.2]} castShadow>
             <boxGeometry args={[0.31, 0.34, 0.18]} />
-            <meshStandardMaterial color="#c48d50" roughness={0.95} flatShading />
-          </mesh>
+            <meshStandardMaterial color={appearance.backpackColor} roughness={0.95} flatShading />
+          </mesh>}
           <group ref={head} position={[0, 0.55, -0.015]}>
             <mesh scale={[1.05, 1.05, 0.95]} castShadow>
               <sphereGeometry args={[0.235, 12, 10]} />
               <meshStandardMaterial color={skin} roughness={0.9} flatShading />
             </mesh>
+            {appearance.hair !== 'none' && <group>
             <mesh position={[0, 0.025, 0]} scale={[1.05, 1, 0.98]} castShadow>
               <sphereGeometry args={[0.24, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
-              <meshStandardMaterial color="#a65d45" roughness={1} flatShading />
+              <meshStandardMaterial color={appearance.hairColor} roughness={1} flatShading />
             </mesh>
+            {appearance.hair === 'short' ? [-1, 0, 1].map(side => <mesh key={side}
+              position={[side * 0.085, 0.19, -0.12]} rotation={[0.15, 0, side * -0.2]} castShadow>
+              <boxGeometry args={[0.075, 0.09, 0.1]} />
+              <meshStandardMaterial color={appearance.hairColor} roughness={1} flatShading />
+            </mesh>) : <group>
+              {[-1, 1].map(side => <mesh key={side} position={[side * 0.205, -0.025, 0.015]} castShadow>
+                <capsuleGeometry args={[0.07, 0.18, 3, 8]} />
+                <meshStandardMaterial color={appearance.hairColor} roughness={1} flatShading />
+              </mesh>)}
+              <mesh position={[0, -0.025, 0.17]} castShadow>
+                <boxGeometry args={[0.34, 0.28, 0.1]} />
+                <meshStandardMaterial color={appearance.hairColor} roughness={1} flatShading />
+              </mesh>
+            </group>}
+            </group>}
+            {appearance.hat !== 'none' && <group>
+              <mesh position={[0, 0.08, 0]} castShadow>
+                <sphereGeometry args={[0.255, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
+                <meshStandardMaterial color={appearance.hatColor} roughness={1} flatShading />
+              </mesh>
+              {appearance.hat === 'beanie' ? <group>
+                <mesh position={[0, 0.105, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                  <torusGeometry args={[0.245, 0.025, 5, 12]} />
+                  <meshStandardMaterial color={appearance.hatColor} roughness={1} />
+                </mesh>
+                <mesh position={[0, 0.35, 0]} castShadow>
+                  <sphereGeometry args={[0.055, 8, 6]} />
+                  <meshStandardMaterial color={appearance.hatColor} roughness={1} flatShading />
+                </mesh>
+              </group> : <mesh position={[0, 0.09, -0.23]} scale={[1, 0.15, 1]} castShadow>
+                <sphereGeometry args={[0.18, 10, 6]} />
+                <meshStandardMaterial color={appearance.hatColor} roughness={1} flatShading />
+              </mesh>}
+            </group>}
             <group ref={eyes} position={[0, 0.025, -0.207]}>
               {[-1, 1].map(side => (
                 <group key={side} position={[side * 0.085, 0, 0]}>
@@ -153,8 +236,16 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
                 </group>
               ))}
             </group>
-            <mesh position={[0, -0.06, -0.218]} rotation={[0, 0, Math.PI]}>
-              <torusGeometry args={[0.05, 0.009, 4, 12, Math.PI]} />
+            <mesh ref={restingMouth} name="resting-mouth" position={[0, -0.07, -0.218]} rotation={[0, 0, Math.PI]}>
+              {appearance.face === 'neutral'
+                ? <boxGeometry args={[0.085, 0.012, 0.012]} />
+                : <torusGeometry args={[appearance.face === 'surprised' ? 0.031 : 0.05, 0.009, 4, 12,
+                  appearance.face === 'surprised' ? Math.PI * 2 : Math.PI]} />}
+              <meshStandardMaterial color={ink} roughness={0.9} />
+            </mesh>
+            <mesh ref={talkingMouth} name="talking-mouth" position={[0, -0.08, -0.226]}
+              scale={[0.042, 0.009, 0.012]} visible={false}>
+              <sphereGeometry args={[1, 12, 8]} />
               <meshStandardMaterial color={ink} roughness={0.9} />
             </mesh>
             <mesh position={[0, -0.02, -0.234]} castShadow>
@@ -166,16 +257,16 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
             <group key={side} ref={node => { shoulders.current[i] = node }} position={[side * 0.29, 0.27, 0]}>
               <mesh position={[0, -0.105, 0]} castShadow>
                 <capsuleGeometry args={[0.075, 0.085, 3, 8]} />
-                <meshStandardMaterial color={player.color} roughness={0.9} flatShading />
+                <meshStandardMaterial color={appearance.topColor} roughness={0.9} flatShading />
               </mesh>
               <group ref={node => { elbows.current[i] = node }} position={[0, -0.21, 0]}>
                 <mesh position={[0, -0.1, 0]} castShadow>
                   <capsuleGeometry args={[0.06, 0.075, 3, 8]} />
-                  <meshStandardMaterial color={player.color} roughness={0.9} flatShading />
+                  <meshStandardMaterial color={appearance.top === 'tee' ? skin : appearance.topColor} roughness={0.9} flatShading />
                 </mesh>
                 <mesh position={[0, -0.16, 0]}>
                   <cylinderGeometry args={[0.068, 0.068, 0.045, 8]} />
-                  <meshStandardMaterial color={ink} roughness={0.95} flatShading />
+                  <meshStandardMaterial color={appearance.top === 'tee' ? skin : appearance.topColor} roughness={0.95} flatShading />
                 </mesh>
                 <mesh position={[0, -0.235, 0]} scale={[1, 1.1, 0.9]} castShadow>
                   <sphereGeometry args={[0.085, 8, 6]} />
@@ -186,10 +277,10 @@ export default function Avatar({ player, local = false, firstPerson = false }: {
           ))}
         </group>
       </group>
-      {!firstPerson && <Html position={[0, 1.85, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
+      {!preview && !firstPerson && <Html position={[0, 1.85, 0]} center distanceFactor={12} style={{ pointerEvents: 'none' }}>
         <span className={`nametag ${local ? 'me' : ''}`}>{player.name}{local ? ' (you)' : ''}</span>
       </Html>}
-      {reaction && <GIFBubble key={reaction.receivedAt} reaction={reaction} name={player.name} />}
+      {!preview && reaction && <GIFBubble key={reaction.receivedAt} reaction={reaction} name={player.name} />}
     </group>
   )
 }
@@ -199,7 +290,9 @@ export function FirstPersonFists() {
   const hands = useRef<(THREE.Group | null)[]>([])
   const previous = useRef(new THREE.Vector3(localPlayer.x, localPlayer.y, localPlayer.z))
   const motion = useRef(createMotion())
-  const color = useNetwork(s => s.id ? s.players[s.id]?.color ?? '#52d6b1' : '#52d6b1')
+  const player = useNetwork(s => s.id ? s.players[s.id] : undefined)
+  const appearance = player?.appearance ?? defaultAppearance(player?.color ?? '#52d6b1')
+  const skin = appearance.skin
   const { camera } = useThree()
   useLayoutEffect(() => {
     camera.layers.enable(2)
@@ -212,12 +305,11 @@ export function FirstPersonFists() {
     const distance = Math.hypot(localPlayer.x - previous.current.x, localPlayer.z - previous.current.z)
     const state = advanceMotion(motion.current, distance, supported(localPlayer), localPlayer.animation === 'walk', delta)
     previous.current.set(localPlayer.x, localPlayer.y, localPlayer.z)
-    const extension = punchExtension(localPlayer.punch)
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? -1 : 1
-      const punch = i === 1 ? extension : 0
+      const punch = punchExtension(i === 1 ? localPlayer.punch : localPlayer.punchLeft)
       const sway = Math.sin(state.phase + i * Math.PI) * state.stride * 0.012 * (1 - state.air)
-      hands.current[i]!.position.set(side * 0.18 - punch * 0.08,
+      hands.current[i]!.position.set(side * (0.18 - punch * 0.08),
         -0.18 + sway + punch * 0.06 - state.landing * 0.025 + Math.sin(clock.elapsedTime * 1.7) * 0.003,
         -0.65 - punch * 0.3)
       hands.current[i]!.rotation.x = punch * -0.2
@@ -237,11 +329,13 @@ export function FirstPersonFists() {
           </mesh>
           <mesh position={[0, 0, 0.105]} rotation={[Math.PI / 2, 0, 0]} renderOrder={10}>
             <cylinderGeometry args={[0.067, 0.073, 0.07, 8]} />
-            <meshStandardMaterial color={ink} roughness={0.95} flatShading depthTest={false} depthWrite={false} />
+            <meshStandardMaterial color={appearance.top === 'tee' ? skin : appearance.topColor}
+              roughness={0.95} flatShading depthTest={false} depthWrite={false} />
           </mesh>
           <mesh position={[0, -0.005, 0.22]} rotation={[Math.PI / 2, 0, 0]} renderOrder={10}>
             <capsuleGeometry args={[0.06, 0.14, 3, 8]} />
-            <meshStandardMaterial color={color} roughness={0.9} flatShading depthTest={false} depthWrite={false} />
+            <meshStandardMaterial color={appearance.top === 'tee' ? skin : appearance.topColor}
+              roughness={0.9} flatShading depthTest={false} depthWrite={false} />
           </mesh>
         </group>
       ))}

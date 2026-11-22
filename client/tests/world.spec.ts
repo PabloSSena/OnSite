@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openMenu } from './helpers'
 
 test('walk from the garden into a furnished room and back outside', async ({ page }) => {
   test.setTimeout(240000)
@@ -16,10 +17,11 @@ test('walk from the garden into a furnished room and back outside', async ({ pag
   await page.getByLabel('What should we call you?').fill('World explorer')
   await page.getByRole('button', { name: 'Join the office' }).click()
   await expect(page.locator('.presence')).toContainText('Live')
+  await openMenu(page)
   const firstPerson = page.getByRole('button', { name: 'First-person view' })
   if (await firstPerson.getAttribute('aria-pressed') === 'true') await firstPerson.click()
   await expect(firstPerson).toHaveAttribute('aria-pressed', 'false')
-  await expect(page.getByText('THE COMMONS', { exact: true })).toBeVisible()
+  await expect(page.getByText('THE COMMONS', { exact: true })).toHaveCount(0)
   await page.locator('canvas').click({ position: { x: 500, y: 300 } })
   await page.screenshot({ path: 'test-results/world-porch.png' })
 
@@ -42,5 +44,6 @@ test('walk from the garden into a furnished room and back outside', async ({ pag
   expect(position.z).toBeGreaterThan(9.5) // Beyond the old map's boundary.
   await page.screenshot({ path: 'test-results/world-garden.png' })
   expect(errors).toEqual([])
+  await openMenu(page)
   await page.getByRole('button', { name: 'Leave', exact: true }).click()
 })

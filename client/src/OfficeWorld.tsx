@@ -1,4 +1,3 @@
-import { Html } from '@react-three/drei'
 import type { RefObject } from 'react'
 import type { Group } from 'three'
 import { box, desks, furniture, monitors, planters, trees, walls, type Box } from './world'
@@ -24,16 +23,6 @@ function Furnishing({ data }: { data: Box }) {
     ))}
     {seat && <Block data={box(x, y + h * 0.25, z + d / 2 - 0.08, w, h * 0.5, 0.16, data.color)} />}
   </>
-}
-
-function Label({ x, z, title, subtitle }: { x: number; z: number; title: string; subtitle: string }) {
-  return <Html position={[x, 0.08, z]} center distanceFactor={22} style={{ pointerEvents: 'none' }}>
-    <div style={{ textAlign: 'center', whiteSpace: 'nowrap', color: '#fff7e9', background: '#354e43dd',
-      padding: '6px 12px', borderRadius: 6, fontFamily: 'system-ui', boxShadow: '0 2px 8px #0002' }}>
-      <strong style={{ fontSize: 12, letterSpacing: 2 }}>{title}</strong>
-      <div style={{ fontSize: 9, opacity: 0.8, marginTop: 2 }}>{subtitle}</div>
-    </div>
-  </Html>
 }
 
 const surfaces = [
@@ -114,11 +103,5 @@ export function OfficeWorld({ obstacles }: { obstacles: RefObject<Group | null> 
       <icosahedronGeometry args={[0.7, 1]} />
       <meshStandardMaterial color="#547b52" />
     </mesh>)}
-    <Label x={-9} z={-14.3} title="THE STUDIO" subtitle="Make something good" />
-    <Label x={9} z={-14.3} title="IDEA ROOM" subtitle="Big plans, small team" />
-    <Label x={-9} z={2.7} title="LIVING ROOM" subtitle="Take a little break" />
-    <Label x={9} z={2.7} title="THE KITCHEN" subtitle="Coffee & company" />
-    <Label x={0} z={7.5} title="THE COMMONS" subtitle="A little house for big ideas" />
-    <Label x={4} z={18} title="THE GARDEN" subtitle="Room to breathe" />
   </>
 }

@@ -14,9 +14,24 @@ or libraries unless the task calls for them.
 - `server/main.go`: in-memory hub, validation, and WebSocket.
 - `docs/protocol.md`: shared contract.
 
+## Parallel work in worktrees
+Several agents usually run at the same time, so every task gets its own worktree.
+- Never edit, switch branches, or commit in the original `main` checkout
+  (`../office`). Treat it as read-only.
+- Start each task in a new sibling worktree on its own branch, for example
+  `git worktree add ../office-<task> -b <task> main`. Do not reuse another
+  agent's worktree or branch; check `git worktree list` first.
+- Run every command from your own worktree. Never `cd` into another worktree.
+- Do not use bare `git stash`/`git stash pop`: the stash is shared by all
+  worktrees. Prefer a temporary WIP commit on your branch.
+- Docker and browser tests share the host. Pick a free port per worktree, e.g.
+  `OFFICE_PORT=8082 docker compose up --build -d` and
+  `OFFICE_URL=http://localhost:8082 npm run smoke` (same for `npm run test:e2e`).
+  Only stop containers that your worktree started.
+- Merge into `main` only when the user asks. Remove your worktree
+  (`git worktree remove`) only after its branch is merged or the user agrees.
+
 ## Rules
-- Use separate Git worktrees for branch development. Keep feature changes in the
-  `updates` worktree; do not switch or modify the original `main` checkout.
 - Use English for all project content: comments, documentation, UI copy, test
   descriptions, and sample messages. Conversation language may follow the user's preference.
 - Read relevant files before editing; preserve existing work.

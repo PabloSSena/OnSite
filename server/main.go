@@ -24,36 +24,113 @@ import (
 const maxPlayers = 10
 
 type player struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Color     string  `json:"color"`
-	X         float64 `json:"x"`
-	Y         float64 `json:"y"`
-	Z         float64 `json:"z"`
-	Punch     float64 `json:"punch"`
-	Rotation  float64 `json:"rotation"`
-	Animation string  `json:"animation"`
-	Voice     bool    `json:"voice"`
-	Camera    bool    `json:"camera"`
+	ID         string     `json:"id"`
+	Name       string     `json:"name"`
+	Color      string     `json:"color"`
+	X          float64    `json:"x"`
+	Y          float64    `json:"y"`
+	Z          float64    `json:"z"`
+	Punch      float64    `json:"punch"`
+	PunchLeft  float64    `json:"punchLeft"`
+	Rotation   float64    `json:"rotation"`
+	Animation  string     `json:"animation"`
+	Voice      bool       `json:"voice"`
+	Speaking   float64    `json:"speaking"`
+	Camera     bool       `json:"camera"`
+	Appearance appearance `json:"appearance"`
 }
 
 type input struct {
-	Type      string          `json:"type"`
-	Name      string          `json:"name"`
-	X         float64         `json:"x"`
-	Y         float64         `json:"y"`
-	Z         float64         `json:"z"`
-	Punch     float64         `json:"punch"`
-	Rotation  float64         `json:"rotation"`
-	Animation string          `json:"animation"`
-	Text      string          `json:"text"`
-	URL       string          `json:"url"`
-	Enabled   *bool           `json:"enabled"`
-	To        string          `json:"to"`
-	Kind      string          `json:"kind"`
-	Data      json.RawMessage `json:"data"`
-	Session   string          `json:"session"`
-	SDP       string          `json:"sdp"`
+	Type       string          `json:"type"`
+	Name       string          `json:"name"`
+	X          float64         `json:"x"`
+	Y          float64         `json:"y"`
+	Z          float64         `json:"z"`
+	Punch      float64         `json:"punch"`
+	PunchLeft  float64         `json:"punchLeft"`
+	Speaking   float64         `json:"speaking"`
+	Rotation   float64         `json:"rotation"`
+	Animation  string          `json:"animation"`
+	Text       string          `json:"text"`
+	URL        string          `json:"url"`
+	Enabled    *bool           `json:"enabled"`
+	To         string          `json:"to"`
+	Kind       string          `json:"kind"`
+	Data       json.RawMessage `json:"data"`
+	Session    string          `json:"session"`
+	SDP        string          `json:"sdp"`
+	Appearance json.RawMessage `json:"appearance"`
+}
+
+type appearance struct {
+	Top           string `json:"top"`
+	Bottom        string `json:"bottom"`
+	Shoes         string `json:"shoes"`
+	TopColor      string `json:"topColor"`
+	BottomColor   string `json:"bottomColor"`
+	ShoeColor     string `json:"shoeColor"`
+	Skin          string `json:"skin"`
+	Hair          string `json:"hair"`
+	HairColor     string `json:"hairColor"`
+	Hat           string `json:"hat"`
+	HatColor      string `json:"hatColor"`
+	Backpack      bool   `json:"backpack"`
+	BackpackColor string `json:"backpackColor"`
+	Face          string `json:"face"`
+}
+
+func oneOf(value string, choices ...string) bool {
+	for _, choice := range choices {
+		if value == choice {
+			return true
+		}
+	}
+	return false
+}
+
+func clothingColor(value string) bool {
+	return oneOf(value, "#52d6b1", "#ffb86b", "#b69cff", "#72baff", "#ff7c9a", "#25333e", "#fff0d3", "#b58453")
+}
+
+func defaultAppearance(color string) appearance {
+	if !clothingColor(color) {
+		color = "#52d6b1"
+	}
+	return appearance{
+		Top: "tee", Bottom: "trousers", Shoes: "boots", TopColor: color,
+		BottomColor: "#25333e", ShoeColor: "#b58453", Skin: "#efc9a9",
+		Hair: "short", HairColor: "#a65d45", Hat: "none", HatColor: "#25333e",
+		Backpack: true, BackpackColor: "#b58453", Face: "smile",
+	}
+}
+
+func parseAppearance(raw json.RawMessage) (appearance, bool) {
+	var a appearance
+	if len(raw) == 0 || len(raw) > 1024 {
+		return a, false
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil || len(fields) != 14 {
+		return a, false
+	}
+	for _, key := range []string{"top", "bottom", "shoes", "topColor", "bottomColor", "shoeColor",
+		"skin", "hair", "hairColor", "hat", "hatColor", "backpack", "backpackColor", "face"} {
+		value, ok := fields[key]
+		if !ok || string(value) == "null" {
+			return a, false
+		}
+	}
+	if json.Unmarshal(raw, &a) != nil {
+		return a, false
+	}
+	return a, oneOf(a.Top, "tee", "hoodie", "jacket") &&
+		oneOf(a.Bottom, "trousers", "shorts") && oneOf(a.Shoes, "boots", "sneakers") &&
+		oneOf(a.Hair, "short", "bob", "none") && oneOf(a.Hat, "none", "beanie", "cap") &&
+		oneOf(a.Face, "smile", "neutral", "surprised") &&
+		clothingColor(a.TopColor) && clothingColor(a.BottomColor) && clothingColor(a.ShoeColor) &&
+		clothingColor(a.HatColor) && clothingColor(a.BackpackColor) &&
+		oneOf(a.Skin, "#f7dfcf", "#efc9a9", "#d9a47c", "#b97953", "#885438", "#533528") &&
+		oneOf(a.HairColor, "#a65d45", "#25333e", "#51382c", "#805539", "#d5b477", "#c4c5c3")
 }
 
 type peer struct {
@@ -132,18 +209,26 @@ func (h *hub) broadcast(v any) {
 func (h *hub) players() []player {
 	result := make([]player, 0, len(h.peers))
 	for p := range h.peers {
-		result = append(result, p.player)
+		state := p.player
+		// A suspended/background renderer must not leave a mouth stuck open.
+		if time.Since(p.lastMove) > time.Second {
+			state.Speaking = 0
+		}
+		result = append(result, state)
 	}
 	return result
 }
 
 func validMove(p *peer, m input, now time.Time) bool {
-	if math.IsNaN(m.X) || math.IsNaN(m.Y) || math.IsNaN(m.Z) || math.IsNaN(m.Punch) || math.IsNaN(m.Rotation) ||
-		math.IsInf(m.X, 0) || math.IsInf(m.Y, 0) || math.IsInf(m.Z, 0) || math.IsInf(m.Punch, 0) || math.IsInf(m.Rotation, 0) {
+	if math.IsNaN(m.Speaking) || math.IsInf(m.Speaking, 0) || m.Speaking < 0 || m.Speaking > 1 {
+		return false
+	}
+	if math.IsNaN(m.X) || math.IsNaN(m.Y) || math.IsNaN(m.Z) || math.IsNaN(m.Punch) || math.IsNaN(m.PunchLeft) || math.IsNaN(m.Rotation) ||
+		math.IsInf(m.X, 0) || math.IsInf(m.Y, 0) || math.IsInf(m.Z, 0) || math.IsInf(m.Punch, 0) || math.IsInf(m.PunchLeft, 0) || math.IsInf(m.Rotation, 0) {
 		return false
 	}
 	if math.Abs(m.X) > 23.5 || math.Abs(m.Z) > 23.5 || math.Abs(m.Rotation) > math.Pi*2 ||
-		m.Y < 0 || m.Y > 3.5 || m.Punch < 0 || m.Punch > 0.32 {
+		m.Y < 0 || m.Y > 3.5 || m.Punch < 0 || m.Punch > 0.32 || m.PunchLeft < 0 || m.PunchLeft > 0.32 {
 		return false
 	}
 	// Allow for jitter, but cap elapsed time to prevent teleporting after idling.
@@ -237,8 +322,14 @@ func (h *hub) handle(c command, now time.Time) {
 		}
 		p.player.Animation = "idle"
 		p.player.Voice = false
+		p.player.Speaking = 0
 		p.player.Camera = false
 		p.player.Z = 6
+		p.player.Appearance = defaultAppearance(p.player.Color)
+		if selected, valid := parseAppearance(m.Appearance); valid {
+			p.player.Appearance = selected
+		}
+		p.player.Color = p.player.Appearance.TopColor
 		p.lastMove = now
 		p.joined = true
 		h.peers[p] = true
@@ -251,9 +342,18 @@ func (h *hub) handle(c command, now time.Time) {
 	}
 	fmt.Println("m.type", m.Type)
 	switch m.Type {
+	case "appearance":
+		if selected, valid := parseAppearance(m.Appearance); valid {
+			p.player.Appearance = selected
+			p.player.Color = selected.TopColor
+			h.broadcast(map[string]any{"type": "snapshot", "players": h.players()})
+		}
 	case "voice":
 		if m.Enabled != nil {
 			p.player.Voice = *m.Enabled
+			if !p.player.Voice {
+				p.player.Speaking = 0
+			}
 		}
 	case "signal":
 		if now.Sub(p.signalWindow) >= time.Second {
@@ -314,6 +414,11 @@ func (h *hub) handle(c command, now time.Time) {
 		}
 		p.player.X, p.player.Z, p.player.Rotation = m.X, m.Z, m.Rotation
 		p.player.Y, p.player.Punch = m.Y, m.Punch
+		p.player.PunchLeft = m.PunchLeft
+		p.player.Speaking = 0
+		if p.player.Voice {
+			p.player.Speaking = m.Speaking
+		}
 		p.player.Animation = "idle"
 		if m.Animation == "walk" {
 			p.player.Animation = "walk"

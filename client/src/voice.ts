@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { send, subscribeSignals, useNetwork, type VoiceSignal } from './network'
+import { localPlayer, send, subscribeSignals, useNetwork, type VoiceSignal } from './network'
+import { createMicrophoneMeter } from './microphoneMeter'
 
 type VoiceState = {
   status: 'off' | 'requesting' | 'active'
@@ -21,6 +22,7 @@ type Call = {
 }
 
 let stream: MediaStream | null = null
+let microphoneMeter: ReturnType<typeof createMicrophoneMeter> | null = null
 let identity: string | null = null
 let generation = 0
 const calls = new Map<string, Call>()
@@ -61,6 +63,9 @@ export function leaveVoice() {
   // Send consent withdrawal before closing local resources.
   if (identity && useNetwork.getState().id === identity) send({ type: 'voice', enabled: false })
   identity = null
+  microphoneMeter?.dispose()
+  microphoneMeter = null
+  localPlayer.speaking = 0
   for (const track of stream?.getTracks() ?? []) {
     track.onended = null
     track.stop()
@@ -199,6 +204,8 @@ export async function joinVoice() {
     if (captured.getAudioTracks().length === 0) throw new Error('No microphone track')
     stream = captured
     identity = id
+    // Meter failures must not prevent the existing voice call from working.
+    try { microphoneMeter = createMicrophoneMeter(stream) } catch { microphoneMeter = null }
     for (const track of stream.getAudioTracks()) track.onended = () => {
       leaveVoice()
       useVoice.setState({ error: 'Microphone disconnected. Join voice to try again.' })
@@ -221,10 +228,18 @@ export function toggleMicrophone() {
   if (!stream) return
   const muted = !useVoice.getState().muted
   for (const track of stream.getAudioTracks()) track.enabled = !muted
+  if (muted) localPlayer.speaking = 0
+  else microphoneMeter?.resume()
   useVoice.setState({ muted })
 }
 
+export function localSpeechLevel(): number {
+  const voice = useVoice.getState()
+  return voice.status === 'active' && !voice.muted ? microphoneMeter?.level() ?? 0 : 0
+}
+
 export async function enableVoicePlayback() {
+  microphoneMeter?.resume()
   const results = await Promise.allSettled([...calls.values()]
     .filter(call => call.audio.srcObject !== null).map(call => call.audio.play()))
   useVoice.setState({ playbackBlocked: results.some(result => result.status === 'rejected') })

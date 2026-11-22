@@ -1,4 +1,5 @@
 import { test as base, expect, chromium, type BrowserContext, type Page } from '@playwright/test'
+import { closeMenu, openMenu } from './helpers'
 
 type MediaProbe = {
   __mediaPCs: RTCPeerConnection[]
@@ -71,6 +72,7 @@ async function joinRoom(page: Page, name: string) {
   await page.getByLabel('What should we call you?').fill(name)
   await page.getByRole('button', { name: 'Join the office' }).click()
   await check(page.locator('.presence')).toContainText('Live')
+  await openMenu(page)
   await check(page.locator('.voice-status')).toHaveText(/^Voice: off$/)
   await check(page.getByRole('button', { name: 'Turn camera on', exact: true })).toBeVisible()
   await check(page.locator('video, audio[data-voice-peer]')).toHaveCount(0)
@@ -82,6 +84,7 @@ async function joinRoom(page: Page, name: string) {
 
 async function joinVoice(page: Page) {
   await page.bringToFront()
+  await openMenu(page)
   await page.getByRole('button', { name: 'Join voice', exact: true }).click()
   await check(page.getByRole('button', { name: 'Mute microphone', exact: true })).toBeVisible()
 }
@@ -143,7 +146,9 @@ async function expectAllStopped(page: Page) {
 }
 
 test('voice and cameras coexist, toggle independently, and release media when leaving', async ({ mediaContext }) => {
-  test.setTimeout(180000)
+  // Repeated native video/audio checks plus two software-rendered worlds can
+  // exceed three minutes; keep the individual playback assertions bounded.
+  test.setTimeout(360000)
   const ana = await mediaContext.newPage()
   const bia = await mediaContext.newPage()
   const errors: string[] = []
@@ -163,6 +168,37 @@ test('voice and cameras coexist, toggle independently, and release media when le
   await expectBothCameras(ana, bia)
   await expectAudioFlow(ana)
   await expectAudioFlow(bia)
+  // Hiding controls must not unmount media owners or stop native video playback.
+  const beforeClosing = await Promise.all([ana, bia].map(page => page.evaluate(() => {
+    const probe = window as unknown as MediaProbe
+    return { requests: probe.__mediaRequests, connections: probe.__mediaPCs.length }
+  })))
+  for (const page of [ana, bia]) {
+    await closeMenu(page)
+    await check(page.getByRole('button', { name: 'Leave voice', exact: true })).toBeHidden()
+    await check(page.getByLabel('You', { exact: true })).toBeVisible()
+    expect(await page.getByLabel('You', { exact: true }).evaluate(element => {
+      const preview = element.closest('figure')!
+      const bounds = preview.getBoundingClientRect()
+      return getComputedStyle(preview).position === 'fixed'
+        && preview.closest('#game-controls') === null
+        && bounds.top >= 0 && bounds.top < 80
+        && bounds.right <= window.innerWidth && bounds.right > window.innerWidth - 80
+        && bounds.width <= 240 && bounds.height <= 200
+    })).toBe(true)
+  }
+  await expectBothCameras(ana, bia)
+  for (const [index, page] of [ana, bia].entries()) {
+    await check.poll(() => page.evaluate(() => (window as unknown as MediaProbe).__mediaStreams
+      .every(stream => stream.getTracks().every(track => track.readyState === 'live'))), poll).toBe(true)
+    const previousBytes = await inboundAudioBytes(page)
+    await check.poll(() => inboundAudioBytes(page), poll).toBeGreaterThan(previousBytes)
+    expect(await page.evaluate(() => {
+      const probe = window as unknown as MediaProbe
+      return { requests: probe.__mediaRequests, connections: probe.__mediaPCs.length }
+    })).toEqual(beforeClosing[index])
+    await openMenu(page)
+  }
   for (const page of [ana, bia]) {
     const types = await page.evaluate(() => (window as unknown as MediaProbe).__mediaSentTypes)
     expect(types).toContain('signal')

@@ -19,10 +19,22 @@ docker compose up --build -d
 Open **http://localhost:8081** in two tabs, join with different names, and move around.
 Click outside the chat to use WASD again. `Leave` closes the connection.
 
+### Menu and customization
+
+The old branding header and floating room titles are removed. Open **Menu** for
+connection status, camera mode, leaving, voice, webcam controls, and customization.
+Closing Menu hides controls without disconnecting audio or video.
+
+Customize before joining or through **Menu → Customize character** while playing.
+The rotating preview shows separate T-shirts/hoodies/jackets, trousers/shorts,
+boots/sneakers, skin tones, hair, hats, faces, and an optional backpack. Use the
+curated color palettes for individual pieces. Changes are visible to everyone
+immediately and saved on this browser without an account or database.
+
 ### Camera views
 
 The office starts in **first-person view**. After joining, toggle
-**First-person view** in the header off to use the original third-person camera.
+**First-person view** in Menu off to use the original third-person camera.
 Click the 3D scene to capture the mouse, then move the mouse to look around.
 WASD/arrow keys move relative to where you are looking, with the same speed and
 collision as third-person mode. Press **Escape** to release the mouse and use
@@ -35,9 +47,9 @@ Mouse capture requires a supported desktop browser on localhost or HTTPS.
 ### Jump, punch, and mirror
 
 - Press **Space** to jump. Release and press again after landing for another jump.
-- Press **F** or **left click** the scene to punch. First-person displays both fists,
-  with the right fist extending during a punch. The initial mouse-capture click
-  does not punch; click again once captured.
+- **Left click** punches with the left arm; **right click** punches with the right.
+  Each arm has its own cooldown, so both can punch together. **F** alternates arms.
+  The initial mouse-capture click does not punch; click again once captured.
 - Jumping and punching are visible to friends and in the mirror at the north end
   of the central hallway (walk straight ahead from spawn). It reflects your viewing
   angle, including your own full body in first-person.
@@ -67,7 +79,7 @@ or climbing/grabbing mechanics.
 
 ### Voice chat
 
-1. Join the office, then click **Join voice** in the voice panel.
+1. Join the office, open **Menu**, then click **Join voice**.
 2. Allow microphone access. Ask your friend to join voice too.
 3. Use **Mute microphone** / **Unmute microphone** or **Leave voice**.
    If the browser blocks playback, click **Enable sound**.
@@ -76,6 +88,12 @@ Voice is room-wide (not proximity-based) and opt-in. Joining the office never
 opens the microphone. Leaving voice/the room, losing the server connection, or
 closing the page releases microphone tracks and peer connections. Reconnecting
 does not silently turn voice back on. Use headphones to avoid feedback.
+
+Your avatar's mouth opens with microphone volume while you speak, settles during
+silence, and stops when muted or voice is off. Everyone sees the animation,
+including players who have not joined voice, and it appears in the mirror.
+Only a normalized activity value reaches Go—not audio samples. This is simple
+volume-driven animation, not word/phoneme lip sync; quieter background noise is gated.
 
 Browsers require **localhost or HTTPS** for microphone access. Plain HTTP on
 `HOST-IP` can run the game but normally cannot use voice. Use an HTTPS proxy for
@@ -142,9 +160,11 @@ A microphone is optional; voice starts only after choosing **Join voice**.
 
 ## Webcams
 
-After joining, click **Turn camera on** and grant browser camera permission.
-Your video appears in the webcam strip for everyone in the room; you can see
-other cameras without enabling your own. The camera feature never requests audio;
+After joining, open **Menu**, click **Turn camera on**, and grant camera permission.
+Video appears on a small 3D panel above each person's head, hidden by walls and
+included in mirror reflections. You can see other cameras without enabling your
+own. Your small self-preview stays in the top-right corner; in first person your
+overhead panel is visible only in the mirror. The camera feature never requests audio;
 microphone audio is a separate **Join voice** opt-in.
 **Turn camera off**, leaving, or losing the room connection stops capture.
 Reconnecting does not automatically restart your camera.
@@ -237,7 +257,7 @@ Manual checklist:
   the horizontal view direction. Escape releases the mouse for chat; switching
   back restores the third-person avatar and controls.
 - Chat appears in both tabs; closing one removes its avatar.
-- Space jumps and lands once per press; F/left click punches, with fists visible
+- Space jumps and lands once per press; left/right click punches the matching arm
   in first-person. Friends see both actions; chat input triggers neither.
 - Jump onto a table, jump again onto its monitor, then walk off and land on the floor.
 - Two devices with headphones: explicitly join voice, verify both directions,

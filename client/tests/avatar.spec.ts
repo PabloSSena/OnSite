@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { openMenu } from './helpers'
 
 test('articulated avatar renders in the mirror, walks, and keeps first-person legs visible', async ({ page }, testInfo) => {
   test.setTimeout(120000)
@@ -38,6 +39,7 @@ test('articulated avatar renders in the mirror, walks, and keeps first-person le
   await page.evaluate(() => document.dispatchEvent(new MouseEvent('mousemove', { movementY: 720 })))
   await page.screenshot({ path: testInfo.outputPath('avatar-first-person-legs.png') })
   await page.keyboard.press('Escape')
+  await openMenu(page)
   await page.getByRole('button', { name: 'First-person view' }).click()
   await expect(page.locator('.nametag.me')).toHaveCount(1)
   await page.screenshot({ path: testInfo.outputPath('avatar-third-person.png') })
