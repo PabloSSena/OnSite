@@ -34,6 +34,10 @@ Several agents usually run at the same time, so every task gets its own worktree
   (`git worktree remove`) only after its branch is merged or the user agrees.
 
 ## Rules
+- First-person view is the priority. Design and verify every feature (world objects,
+  interactions, panels, HUD) for how it looks and works in first person first; other
+  camera modes come second. Prefer keeping the player in first person over cutting to
+  a separate camera.
 - Use English for all project content: comments, documentation, UI copy, test
   descriptions, and sample messages. Conversation language may follow the user's preference.
 - Read relevant files before editing; preserve existing work.
