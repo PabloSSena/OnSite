@@ -2,9 +2,9 @@ import { Html } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useLayoutEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { advanceMotion, createMotion, footTarget, legPose, punchExtension } from './avatarMotion'
+import { advanceMotion, createMotion, easeSit, footTarget, legPose, punchExtension, SEATED_HIP_LIFT, sitPose, STANDING_HIP } from './avatarMotion'
 import { localPlayer, useNetwork, type Player } from './network'
-import { supported } from './world'
+import { seatAt, supported } from './world'
 import GIFBubble from './GIFBubble'
 import { defaultAppearance } from './appearance'
 import { advanceMouth } from './speechMotion'
@@ -35,6 +35,8 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
   const euler = useRef(new THREE.Euler())
   const previous = useRef(new THREE.Vector3(player.x, player.y ?? 0, player.z))
   const motion = useRef(createMotion())
+  const sitBlend = useRef(0)
+  const seatHip = useRef(STANDING_HIP)
   const seed = [...player.id].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % 23
 
   useLayoutEffect(() => {
@@ -73,7 +75,12 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
     previous.current.copy(root.current.position)
     const stride = state.stride * (1 - state.air)
     const breathing = Math.sin(clock.elapsedTime * 1.7 + seed) * 0.006 * (1 - stride)
-    const hipY = 0.58 + Math.abs(Math.sin(state.phase)) * 0.018 * stride + breathing - state.landing * 0.05
+    const standingHip = STANDING_HIP + Math.abs(Math.sin(state.phase)) * 0.018 * stride + breathing - state.landing * 0.05
+    // Seats come from shared world data, so remote players need only `animation: 'sit'`.
+    const seat = p.animation === 'sit' ? seatAt(p.x, p.z) : null
+    if (seat) seatHip.current = seat.height + SEATED_HIP_LIFT
+    const sit = sitBlend.current = easeSit(sitBlend.current, seat !== null, dt)
+    const hipY = standingHip + (seatHip.current + breathing - standingHip) * sit
     hips.current.position.y = hipY
     const punch = punchExtension(p.punch ?? 0)
     const punchLeft = punchExtension(p.punchLeft ?? 0)
@@ -87,7 +94,7 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? -1 : 1
       const foot = footTarget(state, side)
-      const leg = legPose(hipY, foot.y, foot.z)
+      const leg = sitPose(legPose(standingHip, foot.y, foot.z), sit)
       thighs.current[i]!.rotation.x = leg.hip
       knees.current[i]!.rotation.x = leg.knee
       ankles.current[i]!.rotation.x = leg.ankle

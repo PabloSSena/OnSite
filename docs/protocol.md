@@ -9,7 +9,7 @@ Client → server:
 - `appearance`: complete `appearance` object. Valid changes update only the sender's
   appearance and legacy `color` (the top color), then broadcast an immediate snapshot.
   Invalid updates are ignored without partially changing the outfit.
-- `move`: `x`, `z`, `rotation` (radians around Y), `animation` (`idle` or `walk`), at 20 Hz. Optional `y` (height above the floor, 0–3.5), `punch` (RIGHT arm remaining animation seconds, 0–0.32), `punchLeft` (LEFT arm remaining animation seconds, 0–0.32), and `speaking` (normalized microphone amplitude, 0–1) default to zero when omitted. The legacy `punch` name retains its right-arm meaning. Nonfinite/out-of-range speech values reject the move; accepted speech levels are forced to zero unless voice consent is enabled.
+- `move`: `x`, `z`, `rotation` (radians around Y), `animation` (`idle`, `walk`, or `sit`; anything else is stored as `idle`), at 20 Hz. Optional `y` (height above the floor, 0–3.5), `punch` (RIGHT arm remaining animation seconds, 0–0.32), `punchLeft` (LEFT arm remaining animation seconds, 0–0.32), and `speaking` (normalized microphone amplitude, 0–1) default to zero when omitted. The legacy `punch` name retains its right-arm meaning. Nonfinite/out-of-range speech values reject the move; accepted speech levels are forced to zero unless voice consent is enabled.
 - `chat`: `text`, up to 300 characters. At most one accepted message every 400 ms.
 - `voice`: `enabled` (boolean). Explicit opt-in; published through the next snapshot.
 - `signal`: `to` (current player ID), `kind` (`offer`, `answer`, or `ice`), `data` (described below). Only relayed when both players have voice enabled and the target is a different player currently in the room.
@@ -73,6 +73,14 @@ Jump physics and punch timing are client-side; these fields synchronize visual s
 Left mouse punches left; right mouse punches right. Each arm has an independent 0.45-second cooldown and both can animate simultaneously. Non-repeating F presses alternate arms, starting left. In first person only captured mouse input punches; the initial left click only captures the pointer, and right click never captures it. Only the game canvas suppresses the context menu. Focused inputs/buttons ignore game actions; blur, visibility, pointer-lock, and view changes clear pending actions.
 Wall and furniture collision uses full 3D client-side bounds, including vertical contact; this is **not** an authoritative simulation.
 The external world limits remain x/z ±23.5 at every height. The feet-height cap of 3.5 is an artificial movement limit, not a derived wall-top height; jumping from elevated surfaces does not raise it, and moves above it receive a correction.
+Seats (chairs, sofas, benches) are fixed points in the shared client world data
+(`seats` in `client/src/world.ts`): position, cushion height, and facing. Press E
+within 1.3 units of a seat while on the floor to glide into it at 4 units/s (under the
+server speed limit, so no correction), then send `animation: "sit"` with the seat's
+position and facing. E, movement, or Space glides back to the spot you sat down from.
+Other clients look up the seat at the sitter's position to pose the avatar. The server
+does not know about seats and does not reserve them: two players can sit in the same
+spot. Like furniture collision, this is not authoritative.
 Chat uses connection identity and renders text through React, never HTML.
 GIFs load directly from external hosts in a bounded `<img>` with no referrer.
 The server does not download, proxy, or verify image contents; failed loads show a fallback.
@@ -88,6 +96,13 @@ Ten desks sit at fixed positions (`desks` in `client/src/world.ts`, mirrored by
 `deskPositions` in `server/desks.go`; a Go test keeps them equal). Each one is free
 or owned by one browser.
 
+**Using a desk is sitting at it.** E sits (see Seats); `seats[i]` is desk `i`'s chair.
+Once seated in a desk chair, the client opens a non-modal side panel: a Claim button
+for a free desk, the editor for your own, or the notes for a friend's. In first person
+the view turns to frame the desk beside the panel and is restored when it closes.
+Done or Esc closes the panel while you stay seated; standing up (E, movement, Space)
+closes it too. Walking and other game keys are ignored while the panel is open.
+
 **Ownership.** The client creates a random 32-character lowercase hex `token`, stores it
 in local storage under `office-desk-token-v1`, and sends it with every `join`. The
 server keeps only its SHA-256 hash and never sends a token or hash to any client.
@@ -99,7 +114,7 @@ site data loses it.
 Client → server (all take `desk`, an integer 0–9; invalid input is silently ignored):
 - `desk-claim`: the desk must be free, the sender must own no other desk, and the
   sender's last accepted position must be within 2.6 units of the desk center
-  (clients offer E at 2.3). The desk gets the default style with the player's name on the plate.
+  (the desk's chair seat is 1.1 units away). The desk gets the default style with the player's name on the plate.
 - `desk-release`: owner only. Clears the style and all notes.
 - `desk-update`: owner only, `style` is a complete desk style. At most 5 per second;
   unchanged styles are not rebroadcast. Distance is not checked.

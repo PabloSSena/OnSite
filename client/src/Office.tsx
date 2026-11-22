@@ -1,32 +1,38 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { create } from 'zustand'
 import { localPlayer, send, useNetwork } from './network'
-import { desks, stepPhysics } from './world'
+import { deskOfSeat, desks, nearestSeat, stepPhysics, type Seat } from './world'
+import { SEATED_HIP_LIFT, STANDING_HIP } from './avatarMotion'
 import WallMirror from './Mirror'
 import Avatar, { FirstPersonFists } from './Avatar'
 import { OfficeWorld } from './OfficeWorld'
 import WorldCameras from './WorldCameras'
 import { localSpeechLevel } from './voice'
-import { nearestDesk } from './desks'
 
 export type ViewMode = 'third-person' | 'first-person'
-export type DeskCallbacks = {
-  // Called on E next to a desk, and when the nearest desk in range changes.
-  onDeskInteract: (desk: number) => void
-  onNearDesk: (desk: number | null) => void
-}
 
-function Controller({ obstacles, viewMode, desk, focusDesk }: {
-  obstacles: React.RefObject<THREE.Group | null>; viewMode: ViewMode; desk: DeskCallbacks; focusDesk: number | null
+// HUD prompt. Written only when the value changes, never every frame.
+// `desk` is the desk whose chair the hint is about (sit at it, or stand up from it).
+export const useSeatHint = create<{ hint: 'sit' | 'stand' | null; desk: number | null }>(() => ({ hint: null, desk: null }))
+// The desk whose chair the local player is seated in. Sitting is how a desk is used.
+export const useSeatedDesk = create<{ desk: number | null }>(() => ({ desk: null }))
+
+// Entering and leaving glide at walking speed, under the server's 6 units/s limit.
+const SEAT_GLIDE_SPEED = 4
+type Seating = { phase: 'none' | 'entering' | 'seated' | 'leaving'; seat: Seat | null; entry: { x: number; z: number } }
+const standing = (): Seating => ({ phase: 'none', seat: null, entry: { x: 0, z: 0 } })
+
+function Controller({ obstacles, viewMode, focusDesk }: {
+  obstacles: React.RefObject<THREE.Group | null>; viewMode: ViewMode; focusDesk: number | null
 }) {
-  const deskCallbacks = useRef(desk)
-  deskCallbacks.current = desk
-  const nearDesk = useRef<number | null>(null)
   const keys = useRef(new Set<string>())
   const elapsed = useRef(0)
   const look = useRef({ yaw: 0, pitch: 0 })
-  const actions = useRef({ jump: false, left: false, right: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 })
+  const actions = useRef({ jump: false, left: false, right: false, seat: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 })
+  const seating = useRef(standing())
+  const eyeOffset = useRef(0)
   const id = useNetwork(s => s.id)
   const { camera, gl } = useThree()
   const math = useRef({
@@ -34,7 +40,8 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
     ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 8, 10),
   })
   useEffect(() => {
-    actions.current = { jump: false, left: false, right: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 }
+    actions.current = { jump: false, left: false, right: false, seat: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 }
+    seating.current = standing()
   }, [id])
   // First person stays first person while a desk panel is open: the view turns
   // (instantly) to look at the desk, centered in the screen area the panels leave
@@ -48,10 +55,10 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
       return
     }
     savedLook.current ??= { ...look.current }
-    // Wait one frame so the panel has its final layout before measuring it.
-    const frame = requestAnimationFrame(() => {
+    // Wait for the panel layout and the seated eye height to settle before aiming.
+    const timer = setTimeout(() => {
       const [deskX, deskZ] = desks[focusDesk]
-      const ex = localPlayer.x, ey = 1.4 + localPlayer.y, ez = localPlayer.z
+      const { x: ex, y: ey, z: ez } = camera.position
       const tx = deskX - ex, ty = 1.0 - ey, tz = deskZ - 0.1 - ez
       let yaw = Math.atan2(-tx, -tz)
       let pitch = Math.atan2(ty, Math.hypot(tx, tz))
@@ -72,8 +79,8 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
         yaw: THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI,
         pitch: THREE.MathUtils.clamp(pitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05),
       }
-    })
-    return () => cancelAnimationFrame(frame)
+    }, 350)
+    return () => clearTimeout(timer)
   }, [focusDesk, viewMode, camera, gl])
   useEffect(() => {
     const punch = (e: PointerEvent) => {
@@ -93,7 +100,7 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
   }, [viewMode, gl])
   useEffect(() => {
     keys.current.clear()
-    actions.current.jump = actions.current.left = actions.current.right = false
+    actions.current.jump = actions.current.left = actions.current.right = actions.current.seat = false
     if (viewMode !== 'first-person') return
     const canvas = gl.domElement
     look.current = { yaw: localPlayer.rotation, pitch: 0 }
@@ -111,7 +118,7 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
     }
     const clear = () => {
       keys.current.clear()
-      actions.current.jump = actions.current.left = actions.current.right = false
+      actions.current.jump = actions.current.left = actions.current.right = actions.current.seat = false
     }
     const escape = (e: KeyboardEvent) => {
       if (e.code === 'Escape' && document.pointerLockElement === canvas) {
@@ -134,6 +141,10 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (document.querySelector('dialog[open]') || (e.target as HTMLElement).closest('input, textarea, select, button, [contenteditable="true"]')) return
+      if (e.code === 'KeyE') {
+        e.preventDefault()
+        if (!e.repeat) actions.current.seat = true
+      }
       if (e.code === 'Space' || e.code === 'KeyF') {
         e.preventDefault()
         if (!e.repeat) {
@@ -146,14 +157,6 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
           }
         }
       }
-      if (e.code === 'KeyE' && !e.repeat && useNetwork.getState().status === 'online') {
-        const target = nearestDesk(localPlayer.x, localPlayer.z)
-        if (target !== null) {
-          e.preventDefault()
-          keys.current.clear()
-          deskCallbacks.current.onDeskInteract(target)
-        }
-      }
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault()
         keys.current.add(e.code)
@@ -162,7 +165,7 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
     const up = (e: KeyboardEvent) => keys.current.delete(e.code)
     const clear = () => {
       keys.current.clear()
-      actions.current.jump = actions.current.left = actions.current.right = false
+      actions.current.jump = actions.current.left = actions.current.right = actions.current.seat = false
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -210,13 +213,47 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
       localPlayer.punch = 0.32
       action.rightCooldown = 0.45
     }
-    action.jump = action.left = action.right = false
+    const toggleSeat = active && action.seat
+    action.jump = action.left = action.right = action.seat = false
+    const sitting = seating.current
+    if (!online) seating.current = standing()
+    else if (sitting.phase === 'none' && toggleSeat && localPlayer.y <= 0.01) {
+      const seat = nearestSeat(localPlayer.x, localPlayer.z)
+      if (seat) {
+        seating.current = { phase: 'entering', seat, entry: { x: localPlayer.x, z: localPlayer.z } }
+        look.current.yaw = seat.facing
+      }
+    } else if (sitting.phase === 'seated' && sitting.seat) {
+      // A server correction moved us off the seat: drop back to normal movement.
+      if (Math.hypot(localPlayer.x - sitting.seat.x, localPlayer.z - sitting.seat.z) > 0.3) seating.current = standing()
+      else if (toggleSeat || jump || (active && moving)) sitting.phase = 'leaving'
+    } else if (sitting.phase === 'entering' && toggleSeat) sitting.phase = 'leaving'
+    const seated = seating.current
     if (moving && online) {
       dx /= moving
       dz /= moving
-      if (viewMode === 'third-person') localPlayer.rotation = Math.atan2(-dx, -dz)
+      if (viewMode === 'third-person' && seated.phase === 'none') localPlayer.rotation = Math.atan2(-dx, -dz)
     }
-    if (online) {
+    if (online && seated.phase !== 'none' && seated.seat) {
+      // Glide into or out of the seat; furniture collision does not apply here.
+      const target = seated.phase === 'leaving' ? seated.entry : seated.seat
+      const tx = target.x - localPlayer.x
+      const tz = target.z - localPlayer.z
+      const remaining = Math.hypot(tx, tz)
+      const step = SEAT_GLIDE_SPEED * dt
+      if (remaining <= step) {
+        localPlayer.x = target.x
+        localPlayer.z = target.z
+        if (seated.phase === 'entering') seated.phase = 'seated'
+        else if (seated.phase === 'leaving') seating.current = standing()
+      } else {
+        localPlayer.x += tx / remaining * step
+        localPlayer.z += tz / remaining * step
+      }
+      localPlayer.y = action.velocity = 0
+      if (seated.phase !== 'leaving') localPlayer.rotation = seated.seat.facing
+      else if (viewMode === 'third-person' && remaining > 0) localPlayer.rotation = Math.atan2(-tx, -tz)
+    } else if (online) {
       const next = stepPhysics(
         { x: localPlayer.x, y: localPlayer.y, z: localPlayer.z, velocity: action.velocity },
         moving ? dx * 4 * dt : 0, moving ? dz * 4 * dt : 0, dt, jump,
@@ -228,14 +265,22 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
     } else {
       localPlayer.y = localPlayer.punch = localPlayer.punchLeft = action.velocity = 0
     }
-    if (viewMode === 'first-person' && online) localPlayer.rotation = look.current.yaw
-    localPlayer.animation = moving && online ? 'walk' : 'idle'
-    // Notify React only when the nearby desk changes, never every frame.
-    const near = online ? nearestDesk(localPlayer.x, localPlayer.z) : null
-    if (near !== nearDesk.current) {
-      nearDesk.current = near
-      deskCallbacks.current.onNearDesk(near)
-    }
+    const phase = seating.current.phase
+    if (viewMode === 'first-person' && online && (phase === 'none' || phase === 'leaving')) localPlayer.rotation = look.current.yaw
+    localPlayer.animation = !online ? 'idle'
+      : phase === 'seated' ? 'sit'
+        : phase !== 'none' || moving ? 'walk' : 'idle'
+    const nearSeat = online && phase === 'none' && localPlayer.y <= 0.01 ? nearestSeat(localPlayer.x, localPlayer.z) : null
+    const hint = !online ? null : phase === 'seated' ? 'stand' : nearSeat ? 'sit' : null
+    const hintDesk = phase === 'seated' ? deskOfSeat(seating.current.seat) : deskOfSeat(nearSeat)
+    const current = useSeatHint.getState()
+    if (current.hint !== hint || current.desk !== hintDesk) useSeatHint.setState({ hint, desk: hintDesk })
+    // Sitting down in a desk chair opens that desk; standing up closes it.
+    const seatedDesk = phase === 'seated' ? deskOfSeat(seating.current.seat) : null
+    if (useSeatedDesk.getState().desk !== seatedDesk) useSeatedDesk.setState({ desk: seatedDesk })
+    const seatNow = seating.current
+    const eyeTarget = seatNow.phase === 'seated' && seatNow.seat ? seatNow.seat.height + SEATED_HIP_LIFT - STANDING_HIP : 0
+    eyeOffset.current += (eyeTarget - eyeOffset.current) * (1 - Math.exp(-10 * dt))
     elapsed.current += delta
     if (elapsed.current >= 0.05 && online) {
       elapsed.current = 0
@@ -245,17 +290,17 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
     if (viewMode === 'first-person') {
       // A small eye offset stays inside the collider while clearing the legs.
       camera.position.set(localPlayer.x - Math.sin(look.current.yaw) * 0.12,
-        1.4 + localPlayer.y, localPlayer.z - Math.cos(look.current.yaw) * 0.12)
+        1.4 + localPlayer.y + eyeOffset.current, localPlayer.z - Math.cos(look.current.yaw) * 0.12)
       camera.rotation.set(look.current.pitch, look.current.yaw, 0, 'YXZ')
       return
     }
     const { focus, desired, direction, ray, offset } = math.current
-    focus.set(localPlayer.x, 1.1 + localPlayer.y, localPlayer.z)
+    focus.set(localPlayer.x, 1.1 + localPlayer.y + eyeOffset.current, localPlayer.z)
     desired.copy(focus).add(offset)
     direction.copy(desired).sub(focus).normalize()
     ray.set(focus, direction)
     ray.far = offset.length()
-    const hit = obstacles.current && ray.intersectObjects(obstacles.current.children, false)[0]
+    const hit = obstacles.current && ray.intersectObjects(obstacles.current.children, true)[0]
     if (hit) desired.copy(focus).addScaledVector(direction, Math.max(0.25, hit.distance - 0.35))
     // Snap inward to avoid smoothing the camera through a wall; ease outward.
     if (hit) camera.position.copy(desired)
@@ -265,7 +310,7 @@ function Controller({ obstacles, viewMode, desk, focusDesk }: {
   return null
 }
 
-function Scene({ viewMode, desk, focusDesk }: { viewMode: ViewMode; desk: DeskCallbacks; focusDesk: number | null }) {
+function Scene({ viewMode, focusDesk }: { viewMode: ViewMode; focusDesk: number | null }) {
   // Mount DOM annotations only after Canvas has its final event/portal target.
   const connected = useThree(s => s.events.connected)
   const players = useNetwork(s => s.players)
@@ -281,7 +326,7 @@ function Scene({ viewMode, desk, focusDesk }: { viewMode: ViewMode; desk: DeskCa
         shadow-camera-top={30} shadow-camera-bottom={-30} shadow-camera-far={80} shadow-normalBias={0.04} />
       <OfficeWorld obstacles={obstacles} annotations={connected} />
       <WallMirror />
-      <Controller obstacles={obstacles} viewMode={viewMode} desk={desk} focusDesk={focusDesk} />
+      <Controller obstacles={obstacles} viewMode={viewMode} focusDesk={focusDesk} />
       {connected && Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id}
         firstPerson={p.id === id && viewMode === 'first-person'} />)}
       <WorldCameras viewMode={viewMode} />
@@ -290,12 +335,12 @@ function Scene({ viewMode, desk, focusDesk }: { viewMode: ViewMode; desk: DeskCa
   )
 }
 
-export default function Office({ viewMode, desk, focusDesk }: {
-  viewMode: ViewMode; desk: DeskCallbacks; focusDesk: number | null
+export default function Office({ viewMode, focusDesk }: {
+  viewMode: ViewMode; focusDesk: number | null
 }) {
   return (
     <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 100 }}>
-      <Scene viewMode={viewMode} desk={desk} focusDesk={focusDesk} />
+      <Scene viewMode={viewMode} focusDesk={focusDesk} />
     </Canvas>
   )
 }

@@ -215,3 +215,15 @@ export function DeskVisit({ desk }: { desk: Desk }) {
     </form>
   </section>
 }
+
+// Seated at an unclaimed desk: claim it here (one desk per person).
+export function DeskFree({ desk, hasDesk }: { desk: Desk; hasDesk: boolean }) {
+  return <section className="desk-visit" aria-label="Free desk">
+    {hasDesk
+      ? <p className="desk-empty">You already have a desk. Release it first to move here.</p>
+      : <>
+        <p className="desk-empty">Nobody owns this desk yet. Make it yours: colors, wallpaper, plate, and props.</p>
+        <button type="button" className="primary" onClick={() => send({ type: 'desk-claim', desk: desk.id })}>Claim this desk</button>
+      </>}
+  </section>
+}

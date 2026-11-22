@@ -171,6 +171,24 @@ func TestJumpAndPunchStorageAndCorrection(t *testing.T) {
 	}
 }
 
+func TestMoveAnimationValues(t *testing.T) {
+	h := newHub()
+	now := time.Now()
+	p := &peer{
+		joined: true, send: make(chan []byte, 8),
+		player: player{ID: "sitter"}, lastMove: now.Add(-50 * time.Millisecond),
+	}
+	h.peers[p] = true
+	for i, tc := range []struct{ sent, want string }{
+		{"sit", "sit"}, {"walk", "walk"}, {"idle", "idle"}, {"dance", "idle"}, {"", "idle"},
+	} {
+		h.handle(command{peer: p, input: input{Type: "move", Animation: tc.sent}}, now.Add(time.Duration(i)*50*time.Millisecond))
+		if got := h.players()[0].Animation; got != tc.want {
+			t.Fatalf("animation %q: got %q, want %q", tc.sent, got, tc.want)
+		}
+	}
+}
+
 func TestGardenMovementBoundary(t *testing.T) {
 	now := time.Now()
 	p := &peer{lastMove: now.Add(-50 * time.Millisecond), player: player{X: 23.3, Z: 15}}

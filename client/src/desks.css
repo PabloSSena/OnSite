@@ -27,7 +27,6 @@
 .desk-note-form textarea { width: 100%; font: inherit; border: 1px solid #ffffff25; border-radius: 9px; background: #0d1723; color: #fff; padding: 10px; resize: none; outline: none; }
 .desk-note-form textarea:focus { border-color: #65dfbb; }
 .desk-note-form button { margin-top: 8px; }
-.desk-prompt { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); background: #111b27e8; padding: 9px 16px; border-radius: 999px; font-size: 13px; pointer-events: none; white-space: nowrap; }
 /* In-world annotations (drei Html). */
 .desk-poster { width: 120px; height: 90px; box-sizing: content-box; display: grid; place-items: center; overflow: hidden; border: 6px solid #f5efdc; border-radius: 4px; background: #112132; color: #fff; font-size: 11px; box-shadow: 0 4px 14px #0006; }
 .desk-poster img { display: block; width: 100%; height: 100%; object-fit: cover; }

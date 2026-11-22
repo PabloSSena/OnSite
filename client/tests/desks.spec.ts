@@ -42,7 +42,8 @@ async function join(page: Page, name: string) {
   return state
 }
 
-// Up the hallway, then through the meeting-room doorway to stand behind the desk's chair.
+// Up the hallway, then through the meeting-room doorway to stand beside the desk's chair
+// (within the 1.3 sitting range of its seat at x 5, z -10.9).
 // At the initial yaw, W and D move along -z and +x in both camera modes.
 async function walkToDesk(page: Page, firstPerson: boolean) {
   await openMenu(page)
@@ -52,7 +53,7 @@ async function walkToDesk(page: Page, firstPerson: boolean) {
   await page.locator('canvas').click({ position: { x: 480, y: 120 } })
   if (firstPerson) await expect.poll(() => page.evaluate(() => document.pointerLockElement?.tagName)).toBe('CANVAS')
   await walkUntilSent(page, 'KeyW', 'z', '<=', -10.5)
-  await walkUntilSent(page, 'KeyD', 'x', '>=', 3.4)
+  await walkUntilSent(page, 'KeyD', 'x', '>=', 4)
 }
 
 test('claim and customize a desk in first person, then visit it, with notes and a persistent claim', async ({ browser }) => {
@@ -69,14 +70,15 @@ test('claim and customize a desk in first person, then visit it, with notes and 
   const a = await join(owner, 'Desk owner')
   expect(a.desks!.desks[DESK].style, 'the test desk must start free').toBeNull()
   await walkToDesk(owner, true)
-  await expect(owner.locator('.desk-prompt')).toHaveText('Press E to claim this desk')
-  await owner.keyboard.press('KeyE')
-  await expect.poll(() => a.desks?.mine).toBe(DESK)
-  await expect(owner.locator('.desk-prompt')).toHaveText('Press E to customize your desk')
   await expect(owner.getByRole('button', { name: 'My desk' })).toHaveCount(0)
-
-  // E opens a side panel; the player stays in first person, looking at the desk.
+  // Using a desk is sitting at it: E sits, and a desk chair opens the desk's side panel.
+  // The player stays in first person, looking at the desk.
+  await expect(owner.locator('.seat-hint')).toHaveText('Press E to sit and claim this desk')
   await owner.keyboard.press('KeyE')
+  const free = owner.getByRole('dialog', { name: 'Free desk' })
+  await expect(free).toBeVisible()
+  await free.getByRole('button', { name: 'Claim this desk' }).click()
+  await expect.poll(() => a.desks?.mine).toBe(DESK)
   const editor = owner.getByRole('dialog', { name: 'Customize your desk' })
   await expect(editor).toBeVisible()
   await expect.poll(() => owner.evaluate(() => document.pointerLockElement)).toBeNull()
@@ -107,11 +109,11 @@ test('claim and customize a desk in first person, then visit it, with notes and 
 
   // Third person (the secondary mode): the visitor cannot claim it, but can leave a note.
   await walkToDesk(visitor, false)
-  await expect(visitor.locator('.desk-prompt')).toHaveText("Press E to visit Desk owner's desk")
+  await expect(visitor.locator('.seat-hint')).toHaveText("Press E to sit at Desk owner's desk")
   await visitor.keyboard.press('KeyE')
   const visit = visitor.getByRole('dialog', { name: 'Desk notes' })
   await expect(visit).toBeVisible()
-  // Movement is frozen while the panel is open.
+  // Seated with the panel open: movement keys do nothing.
   const sent = b.moves
   const before = sent.length
   await visitor.keyboard.down('KeyS')
@@ -124,7 +126,11 @@ test('claim and customize a desk in first person, then visit it, with notes and 
   await expect(visit.getByText('Coffee at 3? ☕')).toBeVisible()
   await expect(visit.getByRole('button', { name: 'Remove note from Desk visitor' })).toBeVisible()
   await visit.getByRole('button', { name: 'Close desk panel' }).click()
+  // Closing the panel keeps you seated; E then stands up.
+  await expect(visitor.locator('.seat-hint')).toHaveText('Press E to stand up')
   await visitor.screenshot({ path: 'test-results/desk-visit.png' })
+  await visitor.keyboard.press('KeyE')
+  await expect(visitor.locator('.seat-hint')).toHaveText("Press E to sit at Desk owner's desk")
   await visitor.goto('about:blank')
 
   // Coming back keeps the claim through the browser's token; the note is waiting.
@@ -143,6 +149,7 @@ test('claim and customize a desk in first person, then visit it, with notes and 
   await reopened.getByRole('button', { name: 'Release desk' }).click()
   await reopened.getByRole('button', { name: 'Yes, release my desk' }).click()
   await expect.poll(() => again.desks?.desks[DESK].style).toBeNull()
-  await expect(reopened).toBeHidden()
+  // Still seated: the panel turns back into the free-desk view.
+  await expect(owner.getByRole('dialog', { name: 'Free desk' }).getByRole('button', { name: 'Claim this desk' })).toBeVisible()
   expect(errors).toEqual([])
 })

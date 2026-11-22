@@ -449,8 +449,8 @@ func (h *hub) handle(c command, now time.Time) {
 			p.player.Speaking = m.Speaking
 		}
 		p.player.Animation = "idle"
-		if m.Animation == "walk" {
-			p.player.Animation = "walk"
+		if m.Animation == "walk" || m.Animation == "sit" {
+			p.player.Animation = m.Animation
 		}
 		p.lastMove = now
 	case "chat":

@@ -1,7 +1,6 @@
 import { CanvasTexture, SRGBColorSpace } from 'three'
 import { CLOTHING_COLORS } from './appearance'
 import { validGIFURL } from './gif'
-import { desks as deskPositions } from './world'
 
 // Keep these lists aligned with server/desks.go.
 export const DESK_TOPS = [
@@ -253,19 +252,6 @@ export function plateTexture(text: string) {
   })
 }
 
-// The nearest desk within E-interaction range, or null. The server allows 2.6 for latency.
-export function nearestDesk(x: number, z: number, range = 2.3): number | null {
-  let best: number | null = null
-  let bestDistance = range
-  deskPositions.forEach(([dx, dz], i) => {
-    const distance = Math.hypot(x - dx, z - dz)
-    if (distance <= bestDistance) {
-      best = i
-      bestDistance = distance
-    }
-  })
-  return best
-}
 
 const noteColors = ['#fff2a8', '#ffd1dc', '#c9f2e3']
 // One sticky note as a real 3D texture: readable up close in first person,

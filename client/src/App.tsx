@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import Office, { type DeskCallbacks, type ViewMode } from './Office'
-import { DeskEditor, DeskVisit } from './DeskEditor'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import Office, { useSeatHint, useSeatedDesk, type ViewMode } from './Office'
+import { DeskEditor, DeskFree, DeskVisit } from './DeskEditor'
 import Webcams, { WebcamSelfPreview } from './Webcams'
 import { connect, send, useNetwork } from './network'
 import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
@@ -25,36 +25,30 @@ export default function App() {
   const [gifCooldown, setGifCooldown] = useState(false)
   const { status, players, chats } = useNetwork()
   const voice = useVoice()
+  const seatHint = useSeatHint(s => s.hint)
+  const hintDesk = useSeatHint(s => s.desk)
+  const seatedDesk = useSeatedDesk(s => s.desk)
   const log = useRef<HTMLDivElement>(null)
   const desks = useNetwork(s => s.desks)
   const myDesk = useNetwork(s => s.myDesk)
-  const [nearDesk, setNearDesk] = useState<number | null>(null)
-  const [deskPanel, setDeskPanel] = useState<{ mode: 'edit' | 'visit'; id: number } | null>(null)
-  const [deskNotice, setDeskNotice] = useState('')
+  // Sitting in a desk chair opens that desk's panel; Done/Esc closes it while you stay seated.
+  const [deskPanel, setDeskPanel] = useState<number | null>(null)
   const deskDialog = useRef<HTMLDialogElement>(null)
-  const panelDesk = deskPanel ? desks.find(d => d.id === deskPanel.id) : undefined
-  const near = nearDesk === null ? undefined : desks.find(d => d.id === nearDesk)
+  const panelDesk = deskPanel === null ? undefined : desks.find(d => d.id === deskPanel)
+  const panelMode = !panelDesk ? null : !panelDesk.style ? 'free' : panelDesk.id === myDesk ? 'edit' : 'visit'
 
-  function openDesk(mode: 'edit' | 'visit', id: number) {
+  useEffect(() => {
+    if (seatedDesk === null) {
+      deskDialog.current?.close() // Standing up closes the panel.
+      return
+    }
     if (document.pointerLockElement) document.exitPointerLock()
     setMenuOpen(false)
-    setDeskPanel({ mode, id })
-  }
-  const deskCallbacks = useMemo<DeskCallbacks>(() => ({
-    onNearDesk: setNearDesk,
-    onDeskInteract: id => {
-      const { desks, myDesk } = useNetwork.getState()
-      const desk = desks.find(d => d.id === id)
-      if (!desk) return
-      if (desk.style && myDesk === id) openDesk('edit', id)
-      else if (desk.style) openDesk('visit', id)
-      else if (myDesk === null) send({ type: 'desk-claim', desk: id })
-      else setDeskNotice('You already have a desk. Release it first to move.')
-    },
-  }), [])
+    setDeskPanel(seatedDesk)
+  }, [seatedDesk])
   useEffect(() => {
     // Non-modal, so the desk stays visible (and live) beside the panel.
-    if (!deskPanel) return
+    if (deskPanel === null) return
     if (!deskDialog.current?.open) deskDialog.current?.show()
     const escape = (e: KeyboardEvent) => {
       if (e.code === 'Escape') deskDialog.current?.close()
@@ -62,20 +56,11 @@ export default function App() {
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
   }, [deskPanel])
-  useEffect(() => {
-    // Close the panel if the desk is released or changes hands while it is open.
-    if (!deskPanel) return
-    const gone = !panelDesk?.style || (deskPanel.mode === 'edit' ? myDesk !== deskPanel.id : myDesk === deskPanel.id)
-    if (gone) deskDialog.current?.close()
-  }, [deskPanel, panelDesk, myDesk])
-  useEffect(() => {
-    if (!deskNotice) return
-    const timer = setTimeout(() => setDeskNotice(''), 3500)
-    return () => clearTimeout(timer)
-  }, [deskNotice])
-  const deskPrompt = !near ? '' : !near.style
-    ? (myDesk === null ? 'Press E to claim this desk' : 'A free desk (you already have one)')
-    : near.id === myDesk ? 'Press E to customize your desk' : `Press E to visit ${near.ownerName}'s desk`
+  const hinted = hintDesk === null ? undefined : desks.find(d => d.id === hintDesk)
+  const seatPrompt = !seatHint ? '' : seatHint === 'stand' ? 'Press E to stand up'
+    : !hinted ? 'Press E to sit'
+      : !hinted.style ? (myDesk === null ? 'Press E to sit and claim this desk' : 'Press E to sit')
+        : hinted.id === myDesk ? 'Press E to sit at your desk' : `Press E to sit at ${hinted.ownerName}'s desk`
 
   useEffect(() => {
     if (!gifCooldown) return
@@ -127,7 +112,7 @@ export default function App() {
   }
   return (
     <main>
-      {joined && <Office viewMode={viewMode} desk={deskCallbacks} focusDesk={deskPanel?.id ?? null} />}
+      {joined && <Office viewMode={viewMode} focusDesk={deskPanel} />}
       {joined && <>
       <aside className="game-menu" aria-label="Game controls">
         <button className="menu-toggle" aria-expanded={menuOpen} aria-controls="game-controls"
@@ -174,20 +159,21 @@ export default function App() {
         {editingAppearance && <AppearanceEditor value={appearance} onChange={changeAppearance} />}
       </dialog>
       <dialog ref={deskDialog} className="desk-panel panel"
-        aria-label={deskPanel?.mode === 'edit' ? 'Customize your desk' : 'Desk notes'}
+        aria-label={panelMode === 'edit' ? 'Customize your desk' : panelMode === 'free' ? 'Free desk' : 'Desk notes'}
         onClose={() => setDeskPanel(null)}>
         <div className="customization-title">
-          <h2>{deskPanel?.mode === 'edit' ? 'Your desk' : `${panelDesk?.ownerName ?? 'A'}'s desk`}</h2>
+          <h2>{panelMode === 'edit' ? 'Your desk' : panelMode === 'free' ? 'Free desk' : `${panelDesk?.ownerName ?? 'A'}'s desk`}</h2>
           <button onClick={() => deskDialog.current?.close()} aria-label="Close desk panel">Done</button>
         </div>
-        {deskPanel && panelDesk?.style && (deskPanel.mode === 'edit'
-          ? <DeskEditor key={panelDesk.id} desk={panelDesk} />
-          : <DeskVisit key={panelDesk.id} desk={panelDesk} />)}
+        {panelDesk && (panelMode === 'edit' ? <DeskEditor key={panelDesk.id} desk={panelDesk} />
+          : panelMode === 'visit' ? <DeskVisit key={panelDesk.id} desk={panelDesk} />
+            : <DeskFree desk={panelDesk} hasDesk={myDesk !== null} />)}
+        <p className="desk-hint">Done or Esc closes this panel; press E afterwards to stand up.</p>
       </dialog>
-      {(deskPrompt || deskNotice) && !deskPanel && <div className="desk-prompt" role="status">{deskNotice || deskPrompt}</div>}
       </>}
+      {joined && seatPrompt && deskPanel === null && <div className="seat-hint" role="status">{seatPrompt}</div>}
       {joined && <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span>·</span>
-        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate <span>·</span> <kbd>E</kbd> Desk<br />
+        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate <span>·</span> <kbd>E</kbd> Sit (desks too)<br />
         {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse / chat' : 'Click the scene to play · Click the chat to talk'}</div>}
       {!joined ? (
         <div className="overlay">

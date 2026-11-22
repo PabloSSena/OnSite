@@ -3,6 +3,7 @@ import { validGIFURL } from './gif'
 import { loadAppearance, parseAppearance, type Appearance } from './appearance'
 import { deskToken, parseDesks, type Desk } from './desks'
 
+export type Animation = 'idle' | 'walk' | 'sit'
 export type Player = {
   id: string
   name: string
@@ -13,7 +14,7 @@ export type Player = {
   punch: number
   punchLeft: number
   rotation: number
-  animation: 'idle' | 'walk'
+  animation: Animation
   voice: boolean
   speaking: number
   camera: boolean
@@ -61,7 +62,7 @@ export const useNetwork = create<State>(() => ({
 }))
 
 // Mutable local simulation: no React re-render on every animation frame.
-export const localPlayer = { x: 0, y: 0, z: 6, punch: 0, punchLeft: 0, speaking: 0, rotation: 0, animation: 'idle' as 'idle' | 'walk' }
+export const localPlayer = { x: 0, y: 0, z: 6, punch: 0, punchLeft: 0, speaking: 0, rotation: 0, animation: 'idle' as Animation }
 let socket: WebSocket | null = null
 
 export function send(message: object) {
