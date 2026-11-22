@@ -58,6 +58,13 @@ Mouse capture requires a supported desktop browser on localhost or HTTPS.
   Jump again from a surface or walk off to fall. Solid sides/undersides still
   block you, and you cannot jump through the room boundary.
 - Punching is animation only: no damage or knockback.
+
+### Sit down
+
+- Walk up to a chair, sofa, or picnic bench. When "Press E to sit" appears, press
+  **E**. Your avatar slides in, faces the table/room, and sits. Friends see it too.
+- Press **E** again, move, or jump to stand back up where you were.
+- Seats aren't reserved, so two people can end up in the same spot.
 - The mirror adds one scene render when visible; its fixed 1024×512 reflection
   target limits GPU cost. DOM name tags/chat are not part of the reflected scene.
 

@@ -50,6 +50,21 @@ export function legPose(hipY: number, footY: number, footZ: number) {
   return { hip, knee, ankle: -hip - knee }
 }
 
+// Standing hip pivot height and how far above a cushion the seated pivot rests.
+export const STANDING_HIP = 0.58
+export const SEATED_HIP_LIFT = 0.1
+
+export const easeSit = (blend: number, seated: boolean, dt: number) =>
+  damp(blend, seated ? 1 : 0, 10, Math.min(dt, 0.1))
+
+// Blend from the standing pose toward a seated one: thighs level and forward,
+// shins hanging straight down, boots level.
+export function sitPose(pose: ReturnType<typeof legPose>, blend: number) {
+  const hip = pose.hip + (Math.PI / 2 - pose.hip) * blend
+  const knee = pose.knee + (-Math.PI / 2 - pose.knee) * blend
+  return { hip, knee, ankle: -hip - knee }
+}
+
 export function punchExtension(remaining: number) {
   return remaining > 0 ? Math.sin(Math.PI * (1 - Math.min(0.32, remaining) / 0.32)) : 0
 }

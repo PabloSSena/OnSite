@@ -22,6 +22,7 @@ button:focus-visible { outline: 2px solid #65dfbb; outline-offset: 3px; }
 .count { border-left: 1px solid #ffffff25; padding-left: 15px; margin-left: 15px; }
 .help { position: absolute; left: 24px; bottom: 24px; background: #111b27e8; padding: 12px 16px; border-radius: 10px; font-size: 12px; color: #b5c4ce; }
 .help span { margin: 0 10px; }
+.seat-hint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); background: #111b27e8; padding: 8px 14px; border-radius: 999px; font-size: 13px; color: #e6eef3; pointer-events: none; }
 kbd { display: inline-block; background: #ffffff12; padding: 4px 6px; border-radius: 4px; margin-right: 3px; }
 .overlay { position: absolute; inset: 0; display: grid; place-items: center; background: #0d182852; backdrop-filter: blur(4px); }
 .panel { background: #111b27f5; border: 1px solid #ffffff1c; border-radius: 18px; box-shadow: 0 20px 60px #07111e40; }
