@@ -30,14 +30,17 @@ export const walls: Box[] = [
   ...[-23, 23].map(z => box(0, 0.6, z, 46, 1.2, 0.2, '#9caa86')),
 ]
 
-export const desks = [[-12, -12], [-6, -12], [-12, -8.5], [-6, -8.5]] as const
+// Ten claimable desks: a 3x2 studio grid and two pairs flanking the meeting table.
+// Keep in sync with deskPositions in server/desks.go (a Go test checks it).
+export const desks = [[-13.4, -12], [-9.2, -12], [-5, -12], [-13.4, -8.5], [-9.2, -8.5], [-5, -8.5], [5, -12], [13.4, -12], [5, -8.5], [13.4, -8.5]] as const
 export const trees = [[-20, -17], [20, -17], [-20, -4], [20, -4], [-19, 16], [19, 16], [-9, 20], [9, 20]] as const
 export const planters = [[-4, 5.5], [4, 5.5], [-14, 2.8], [14, 2.8]] as const
-export const furniture: Box[] = [
-  ...desks.map(([x, z]) => table(x, 0.42, z, 3.2, 0.84, 1.5, '#b98253')),
-  ...desks.map(([x, z]) => chair(x, 0.4, z + 1.25, 0.8, 0.8, 0.75, '#59796c')),
-  table(9, 0.42, -11, 5.5, 0.84, 2.3, '#b98253'),
-  ...[6.8, 9, 11.2].flatMap(x => [-13, -9].map(z => chair(x, 0.4, z, 0.8, 0.8, 0.8, '#ae7964'))),
+// Desk tables and chairs collide like any furniture; Desk.tsx renders them with the owner's colors.
+export const deskTables: Box[] = desks.map(([x, z]) => table(x, 0.42, z, 2.8, 0.84, 1.5, '#b98253'))
+export const deskChairs: Box[] = desks.map(([x, z]) => chair(x, 0.4, z + 1.25, 0.8, 0.8, 0.75, '#59796c'))
+export const sharedFurniture: Box[] = [
+  table(9, 0.42, -11, 2.6, 0.84, 2.3, '#b98253'),
+  ...[8.3, 9.7].flatMap(x => [-13, -9].map(z => chair(x, 0.4, z, 0.6, 0.8, 0.7, '#ae7964'))),
   box(-11, 0.45, -2.8, 6, 0.9, 1.5, '#708d77'),
   box(-14, 0.45, -0.5, 1.5, 0.9, 3, '#708d77'),
   table(-9, 0.22, 0, 2.8, 0.44, 1.6, '#b98253'),
@@ -55,6 +58,7 @@ export const furniture: Box[] = [
   ...trees.map(([x, z]) => box(x, 1, z, 0.7, 2, 0.7, '#806147')),
   ...planters.map(([x, z]) => box(x, 0.4, z, 1.1, 0.8, 1.1, '#ad7658')),
 ]
+export const furniture: Box[] = [...deskTables, ...deskChairs, ...sharedFurniture]
 
 // Screen geometry is shared by rendering and height-aware collision.
 export const monitors: Box[] = desks.map(([x, z]) =>

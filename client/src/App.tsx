@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-import Office, { type ViewMode } from './Office'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import Office, { type DeskCallbacks, type ViewMode } from './Office'
+import { DeskEditor, DeskVisit } from './DeskEditor'
 import Webcams, { WebcamSelfPreview } from './Webcams'
 import { connect, send, useNetwork } from './network'
 import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
@@ -25,7 +26,49 @@ export default function App() {
   const { status, players, chats } = useNetwork()
   const voice = useVoice()
   const log = useRef<HTMLDivElement>(null)
+  const desks = useNetwork(s => s.desks)
+  const myDesk = useNetwork(s => s.myDesk)
+  const [nearDesk, setNearDesk] = useState<number | null>(null)
+  const [deskPanel, setDeskPanel] = useState<{ mode: 'edit' | 'visit'; id: number } | null>(null)
+  const [deskNotice, setDeskNotice] = useState('')
+  const deskDialog = useRef<HTMLDialogElement>(null)
+  const panelDesk = deskPanel ? desks.find(d => d.id === deskPanel.id) : undefined
+  const near = nearDesk === null ? undefined : desks.find(d => d.id === nearDesk)
 
+  function openDesk(mode: 'edit' | 'visit', id: number) {
+    if (document.pointerLockElement) document.exitPointerLock()
+    setMenuOpen(false)
+    setDeskPanel({ mode, id })
+  }
+  const deskCallbacks = useMemo<DeskCallbacks>(() => ({
+    onNearDesk: setNearDesk,
+    onDeskInteract: id => {
+      const { desks, myDesk } = useNetwork.getState()
+      const desk = desks.find(d => d.id === id)
+      if (!desk) return
+      if (desk.style && myDesk === id) openDesk('edit', id)
+      else if (desk.style) openDesk('visit', id)
+      else if (myDesk === null) send({ type: 'desk-claim', desk: id })
+      else setDeskNotice('You already have a desk. Release it first to move.')
+    },
+  }), [])
+  useEffect(() => {
+    if (deskPanel && !deskDialog.current?.open) deskDialog.current?.showModal()
+  }, [deskPanel])
+  useEffect(() => {
+    // Close the panel if the desk is released or changes hands while it is open.
+    if (!deskPanel) return
+    const gone = !panelDesk?.style || (deskPanel.mode === 'edit' ? myDesk !== deskPanel.id : myDesk === deskPanel.id)
+    if (gone) deskDialog.current?.close()
+  }, [deskPanel, panelDesk, myDesk])
+  useEffect(() => {
+    if (!deskNotice) return
+    const timer = setTimeout(() => setDeskNotice(''), 3500)
+    return () => clearTimeout(timer)
+  }, [deskNotice])
+  const deskPrompt = !near ? '' : !near.style
+    ? (myDesk === null ? 'Press E to claim this desk' : 'A free desk (you already have one)')
+    : near.id === myDesk ? 'Press E to customize your desk' : `Press E to visit ${near.ownerName}'s desk`
 
   useEffect(() => {
     if (!gifCooldown) return
@@ -77,7 +120,7 @@ export default function App() {
   }
   return (
     <main>
-      {joined && <Office viewMode={viewMode} />}
+      {joined && <Office viewMode={viewMode} desk={deskCallbacks} />}
       {joined && <>
       <aside className="game-menu" aria-label="Game controls">
         <button className="menu-toggle" aria-expanded={menuOpen} aria-controls="game-controls"
@@ -93,6 +136,8 @@ export default function App() {
             setEditingAppearance(true)
             customization.current?.showModal()
           }}>Customize character</button>
+          <button disabled={myDesk === null} title={myDesk === null ? 'Walk up to a free desk and press E to claim it' : undefined}
+            onClick={() => myDesk !== null && openDesk('edit', myDesk)}>My desk</button>
           <button onClick={() => { setMenuOpen(false); setJoined(false) }}>Leave</button>
         </div>
       <section className="voice" aria-label="Voice chat">
@@ -123,9 +168,21 @@ export default function App() {
         </div>
         {editingAppearance && <AppearanceEditor value={appearance} onChange={changeAppearance} />}
       </dialog>
+      <dialog ref={deskDialog} className="customization-dialog desk-dialog panel"
+        aria-label={deskPanel?.mode === 'edit' ? 'Customize your desk' : 'Desk notes'}
+        onClose={() => setDeskPanel(null)}>
+        <div className="customization-title">
+          <h2>{deskPanel?.mode === 'edit' ? 'Your desk' : `${panelDesk?.ownerName ?? 'A'}'s desk`}</h2>
+          <button onClick={() => deskDialog.current?.close()} aria-label="Close desk panel">Done</button>
+        </div>
+        {deskPanel && panelDesk?.style && (deskPanel.mode === 'edit'
+          ? <DeskEditor key={panelDesk.id} desk={panelDesk} />
+          : <DeskVisit key={panelDesk.id} desk={panelDesk} />)}
+      </dialog>
+      {(deskPrompt || deskNotice) && !deskPanel && <div className="desk-prompt" role="status">{deskNotice || deskPrompt}</div>}
       </>}
       {joined && <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span>·</span>
-        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate<br />
+        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate <span>·</span> <kbd>E</kbd> Desk<br />
         {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse / chat' : 'Click the scene to play · Click the chat to talk'}</div>}
       {!joined ? (
         <div className="overlay">

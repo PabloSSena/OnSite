@@ -1,29 +1,9 @@
 import type { RefObject } from 'react'
 import type { Group } from 'three'
-import { box, desks, furniture, monitors, planters, trees, walls, type Box } from './world'
-
-function Block({ data }: { data: Box }) {
-  return <mesh position={data.position} castShadow receiveShadow>
-    <boxGeometry args={data.size} />
-    <meshStandardMaterial color={data.color} roughness={0.85} />
-  </mesh>
-}
-
-function Furnishing({ data }: { data: Box }) {
-  if (!data.kind) return <Block data={data} />
-  const [x, y, z] = data.position
-  const [w, h, d] = data.size
-  const seat = data.kind === 'chair'
-  const top = seat ? h * 0.55 : h - 0.06
-  return <>
-    <Block data={box(x, y - h / 2 + top, z, w, 0.12, d, data.color)} />
-    {[-1, 1].flatMap(sx => [-1, 1].map(sz =>
-      <Block key={`${sx}${sz}`} data={box(x + sx * (w / 2 - 0.12), y - h / 2 + top / 2,
-        z + sz * (d / 2 - 0.12), 0.12, top, 0.12, '#665846')} />
-    ))}
-    {seat && <Block data={box(x, y + h * 0.25, z + d / 2 - 0.08, w, h * 0.5, 0.16, data.color)} />}
-  </>
-}
+import { Block, Furnishing } from './Blocks'
+import DeskView from './Desk'
+import { useNetwork } from './network'
+import { box, desks, planters, sharedFurniture, trees, walls, type Box } from './world'
 
 const surfaces = [
   box(0, -0.12, 0, 48, 0.2, 48, '#80966b'),
@@ -48,11 +28,6 @@ const details: Box[] = [
     box(x, 0.87, z, 0.12, 0.12, 4, '#f7ebd2'),
     box(x, 2.43, z, 0.12, 0.12, 4, '#f7ebd2'),
   ])),
-  ...desks.flatMap(([x, z]) => [
-    box(x, 0.93, z - 0.25, 0.08, 0.3, 0.08, '#384f50'),
-    box(x, 0.87, z + 0.3, 0.8, 0.04, 0.25, '#ece2cd'),
-    box(x + 1.1, 0.96, z, 0.18, 0.23, 0.18, '#f2ddad'),
-  ]),
   box(9, 1.8, -15.8, 5, 1.6, 0.08, '#f5efdc'),
   box(9, 1.8, -15.73, 3.7, 0.035, 0.02, '#b2c3ad'),
   box(-9, 1.8, -15.8, 3, 1.3, 0.08, '#4e766b'),
@@ -80,13 +55,15 @@ const details: Box[] = [
   ]),
 ]
 
-export function OfficeWorld({ obstacles }: { obstacles: RefObject<Group | null> }) {
+export function OfficeWorld({ obstacles, annotations }: { obstacles: RefObject<Group | null>; annotations: boolean }) {
+  const deskState = useNetwork(s => s.desks)
   return <>
     {surfaces.map((data, i) => <Block key={`floor${i}`} data={data} />)}
     <group ref={obstacles}>
       {walls.map((data, i) => <Block key={`wall${i}`} data={data} />)}
-      {furniture.map((data, i) => <Furnishing key={`furniture${i}`} data={data} />)}
-      {monitors.map((data, i) => <Block key={`monitor${i}`} data={data} />)}
+      {sharedFurniture.map((data, i) => <Furnishing key={`furniture${i}`} data={data} />)}
+      {desks.map((_, i) => <DeskView key={`desk${i}`} index={i}
+        desk={deskState.find(d => d.id === i)} annotations={annotations} />)}
     </group>
     {details.map((data, i) => <Block key={`detail${i}`} data={data} />)}
     {trees.map(([x, z], i) => <group key={`tree${i}`} position={[x, 0, z]}>

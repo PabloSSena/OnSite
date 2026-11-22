@@ -10,8 +10,10 @@ or libraries unless the task calls for them.
 - `client/src/Avatar.tsx`: procedural character rig and first-person hands.
 - `client/src/avatarMotion.ts`: distance-driven gait and leg pose helpers.
 - `client/src/network.ts`: connection, protocol, and remote state.
-- `client/src/App.tsx`: entry screen, HUD, and chat.
+- `client/src/App.tsx`: entry screen, HUD, chat, and desk dialogs.
+- `client/src/desks.ts`, `Desk.tsx`, `DeskItems.tsx`, `DeskEditor.tsx`: desk styles, rendering, props, and editor.
 - `server/main.go`: in-memory hub, validation, and WebSocket.
+- `server/desks.go`: desk ownership, validation, and JSON persistence (`DESKS_FILE`).
 - `docs/protocol.md`: shared contract.
 
 ## Parallel work in worktrees

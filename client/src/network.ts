@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { validGIFURL } from './gif'
 import { loadAppearance, parseAppearance, type Appearance } from './appearance'
+import { deskToken, parseDesks, type Desk } from './desks'
 
 export type Player = {
   id: string
@@ -44,6 +45,7 @@ type ServerMessage =
   | { type: 'correction'; player: Player }
   | ({ type: 'chat' } & Chat)
   | { type: 'gif'; id: string; url: string }
+  | { type: 'desks'; desks: unknown; mine: number | null }
 
 type State = {
   id: string | null
@@ -51,9 +53,11 @@ type State = {
   players: Record<string, Player>
   chats: Chat[]
   gifs: Record<string, GIFReaction>
+  desks: Desk[]
+  myDesk: number | null
 }
 export const useNetwork = create<State>(() => ({
-  id: null, status: 'offline', players: {}, chats: [], gifs: {},
+  id: null, status: 'offline', players: {}, chats: [], gifs: {}, desks: [], myDesk: null,
 }))
 
 // Mutable local simulation: no React re-render on every animation frame.
@@ -78,13 +82,12 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
     socket = current = ws
     ws.onopen = () => {
       const appearance = parseAppearance(getAppearance ? getAppearance() : loadAppearance()) ?? loadAppearance()
-      ws.send(JSON.stringify({ type: 'join', name, appearance }))
+      ws.send(JSON.stringify({ type: 'join', name, appearance, token: deskToken() }))
     }
     ws.onmessage = (event) => {
       if (stopped) return
       let msg: ServerMessage
       try { msg = JSON.parse(event.data) as ServerMessage } catch { return }
-      console.log('heyy', msg.type)
       switch (msg.type) {
         case 'camera-signal':
           videoSignalListeners.forEach(listener => listener(msg))
@@ -124,6 +127,12 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
         case 'chat':
           useNetwork.setState(s => ({ chats: [...s.chats.slice(-99), msg] }))
           break
+        case 'desks': {
+          const desks = parseDesks(msg.desks)
+          const mine = typeof msg.mine === 'number' ? msg.mine : null
+          if (desks) useNetwork.setState({ desks, myDesk: mine })
+          break
+        }
         case 'gif':
           if (validGIFURL(msg.url) && useNetwork.getState().players[msg.id]) {
             useNetwork.setState(s => ({
@@ -136,7 +145,7 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
     ws.onerror = () => ws.close()
     ws.onclose = () => {
       if (stopped) return
-      useNetwork.setState({ id: null, players: {}, gifs: {}, status: 'reconnecting' })
+      useNetwork.setState({ id: null, players: {}, gifs: {}, desks: [], myDesk: null, status: 'reconnecting' })
       retry = setTimeout(open, Math.min(1000 * 2 ** attempt++, 10000))
     }
   }
@@ -150,6 +159,6 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
       current.close()
     }
     if (socket === current) socket = null
-    useNetwork.setState({ id: null, players: {}, gifs: {}, status: 'offline' })
+    useNetwork.setState({ id: null, players: {}, gifs: {}, desks: [], myDesk: null, status: 'offline' })
   }
 }

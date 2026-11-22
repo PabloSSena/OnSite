@@ -5,7 +5,7 @@ import ts from 'typescript'
 // Exercise the real collision data without a browser or an additional test dependency.
 const source = await readFile(new URL('../src/world.ts', import.meta.url), 'utf8')
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } })
-const { blocked, colliders, monitors } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
+const { blocked, colliders, desks, monitors } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
 
 assert.equal(blocked(0, 6), false, 'spawn is clear')
 assert.equal(blocked(1.5, 4), false, 'entrance has room for the player radius')
@@ -44,12 +44,20 @@ for (let i = 0; i < queue.length; i++) {
   }
 }
 for (const [name, x, z] of [
-  ['studio', -4, -11], ['meeting room', 4, -11],
+  ['studio', -3, -10.5], ['meeting room', 3, -10.5],
   ['lounge', -4, -1], ['kitchen', 4, -1],
   ['picnic area', -10, 15], ['garden lounge', 10, 7], ['raised beds', 15, 18],
   ['west side garden', -20, 6], ['east side garden', 20, 6],
   ['north hallway mirror approach', 0, -14],
 ]) {
   assert.ok(visited.has(`${x},${z}`), `${name} is reachable from spawn`)
+}
+// Every claimable desk needs a walkable spot within E-interaction range (2.3).
+for (const [x, z] of desks) {
+  const near = [...visited].some(key => {
+    const [px, pz] = key.split(',').map(Number)
+    return Math.hypot(px - x, pz - z) <= 2.2
+  })
+  assert.ok(near, `desk at ${x},${z} is reachable within interaction range`)
 }
 console.log(`World collision checks passed; ${visited.size} walkable points connected to spawn.`)

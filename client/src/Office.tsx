@@ -8,10 +8,21 @@ import Avatar, { FirstPersonFists } from './Avatar'
 import { OfficeWorld } from './OfficeWorld'
 import WorldCameras from './WorldCameras'
 import { localSpeechLevel } from './voice'
+import { nearestDesk } from './desks'
 
 export type ViewMode = 'third-person' | 'first-person'
+export type DeskCallbacks = {
+  // Called on E next to a desk, and when the nearest desk in range changes.
+  onDeskInteract: (desk: number) => void
+  onNearDesk: (desk: number | null) => void
+}
 
-function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.Group | null>; viewMode: ViewMode }) {
+function Controller({ obstacles, viewMode, desk }: {
+  obstacles: React.RefObject<THREE.Group | null>; viewMode: ViewMode; desk: DeskCallbacks
+}) {
+  const deskCallbacks = useRef(desk)
+  deskCallbacks.current = desk
+  const nearDesk = useRef<number | null>(null)
   const keys = useRef(new Set<string>())
   const elapsed = useRef(0)
   const look = useRef({ yaw: 0, pitch: 0 })
@@ -95,6 +106,14 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
           }
         }
       }
+      if (e.code === 'KeyE' && !e.repeat && useNetwork.getState().status === 'online') {
+        const target = nearestDesk(localPlayer.x, localPlayer.z)
+        if (target !== null) {
+          e.preventDefault()
+          keys.current.clear()
+          deskCallbacks.current.onDeskInteract(target)
+        }
+      }
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault()
         keys.current.add(e.code)
@@ -171,6 +190,12 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
     }
     if (viewMode === 'first-person' && online) localPlayer.rotation = look.current.yaw
     localPlayer.animation = moving && online ? 'walk' : 'idle'
+    // Notify React only when the nearby desk changes, never every frame.
+    const near = online ? nearestDesk(localPlayer.x, localPlayer.z) : null
+    if (near !== nearDesk.current) {
+      nearDesk.current = near
+      deskCallbacks.current.onNearDesk(near)
+    }
     elapsed.current += delta
     if (elapsed.current >= 0.05 && online) {
       elapsed.current = 0
@@ -200,7 +225,7 @@ function Controller({ obstacles, viewMode }: { obstacles: React.RefObject<THREE.
   return null
 }
 
-function Scene({ viewMode }: { viewMode: ViewMode }) {
+function Scene({ viewMode, desk }: { viewMode: ViewMode; desk: DeskCallbacks }) {
   // Mount DOM annotations only after Canvas has its final event/portal target.
   const connected = useThree(s => s.events.connected)
   const players = useNetwork(s => s.players)
@@ -214,9 +239,9 @@ function Scene({ viewMode }: { viewMode: ViewMode }) {
       <directionalLight position={[-12, 24, 10]} intensity={2.4} color="#fff0d5" castShadow
         shadow-mapSize={[2048, 2048]} shadow-camera-left={-30} shadow-camera-right={30}
         shadow-camera-top={30} shadow-camera-bottom={-30} shadow-camera-far={80} shadow-normalBias={0.04} />
-      <OfficeWorld obstacles={obstacles} />
+      <OfficeWorld obstacles={obstacles} annotations={connected} />
       <WallMirror />
-      <Controller obstacles={obstacles} viewMode={viewMode} />
+      <Controller obstacles={obstacles} viewMode={viewMode} desk={desk} />
       {connected && Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id}
         firstPerson={p.id === id && viewMode === 'first-person'} />)}
       <WorldCameras viewMode={viewMode} />
@@ -225,10 +250,10 @@ function Scene({ viewMode }: { viewMode: ViewMode }) {
   )
 }
 
-export default function Office({ viewMode }: { viewMode: ViewMode }) {
+export default function Office({ viewMode, desk }: { viewMode: ViewMode; desk: DeskCallbacks }) {
   return (
     <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 100 }}>
-      <Scene viewMode={viewMode} />
+      <Scene viewMode={viewMode} desk={desk} />
     </Canvas>
   )
 }

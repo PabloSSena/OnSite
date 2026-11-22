@@ -1,0 +1,34 @@
+.desk-dialog { width: min(560px, calc(100vw - 32px)); overflow-y: auto; }
+.desk-editor, .desk-visit { padding: 14px 4px 4px; }
+.desk-editor h3 { font-size: 13px; margin: 16px 0 8px; color: #b5c4ce; }
+.desk-fields { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; margin-bottom: 14px; font-size: 12px; color: #b5c4ce; }
+.desk-fields input { padding: 8px 10px; }
+.desk-status { border: 0; padding: 0; margin: 0 0 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+.desk-status legend { font-size: 11px; color: #b5c4ce; margin-bottom: 7px; }
+.desk-status button { font-size: 12px; padding: 6px 10px; display: flex; align-items: center; gap: 6px; }
+.desk-status span, .desk-visit-status span { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+.desk-tops button { border-radius: 6px; }
+.desk-poster-form label, .desk-note-form label { display: block; font-size: 11px; color: #b5c4ce; margin-bottom: 6px; }
+.desk-poster-form div { display: flex; gap: 8px; }
+.desk-poster-form input { padding: 8px 10px; }
+.desk-poster-form button { font-size: 12px; }
+.desk-note-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.desk-note-list li { background: #fff2a8; color: #3a3317; border-radius: 4px; padding: 8px 10px; display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+.desk-note-list p { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.desk-note-list small { grid-column: 1; font-size: 11px; opacity: .75; }
+.desk-note-list button { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: 11px; padding: 4px 8px; color: #3a3317; border-color: #3a331740; }
+.desk-empty { font-size: 12px; color: #a6b8c6; }
+.desk-release { margin-top: 8px; font-size: 12px; color: #ff9aae; border-color: #ff9aae55; }
+.desk-visit-status { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0 0 12px; color: #b5c4ce; }
+.desk-note-form textarea { width: 100%; font: inherit; border: 1px solid #ffffff25; border-radius: 9px; background: #0d1723; color: #fff; padding: 10px; resize: none; outline: none; }
+.desk-note-form textarea:focus { border-color: #65dfbb; }
+.desk-note-form button { margin-top: 8px; }
+.desk-prompt { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); background: #111b27e8; padding: 9px 16px; border-radius: 999px; font-size: 13px; pointer-events: none; white-space: nowrap; }
+/* In-world annotations (drei Html). */
+.desk-poster { width: 120px; height: 90px; display: grid; place-items: center; overflow: hidden; border: 6px solid #f5efdc; border-radius: 4px; background: #112132; color: #fff; font-size: 11px; box-shadow: 0 4px 14px #0006; }
+.desk-poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.desk-notes { display: grid; gap: 4px; width: 92px; }
+.desk-notes p { margin: 0; background: #fff2a8; color: #3a3317; padding: 4px 6px; border-radius: 2px; font-size: 10px; line-height: 1.25; box-shadow: 0 2px 6px #0004; transform: rotate(-2deg); overflow-wrap: anywhere; }
+.desk-notes p:nth-child(2) { transform: rotate(1.5deg); background: #ffd1dc; }
+.desk-notes p:nth-child(3) { transform: rotate(-1deg); background: #c9f2e3; }
+.desk-notes b { display: block; font-size: 9px; opacity: .7; }

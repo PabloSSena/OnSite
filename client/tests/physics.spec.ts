@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { walkUntilSent } from './helpers'
 import { blocked, colliders, furniture, maxFeetHeight, monitors, stepPhysics, supported, verticalStep, walls, WORLD_LIMIT, type Box, type PhysicsState } from '../src/world'
 
 function advance(state: PhysicsState, frames: number, dx = 0, dz = 0, jump = false) {
@@ -9,7 +10,7 @@ function advance(state: PhysicsState, frames: number, dx = 0, dz = 0, jump = fal
 }
 
 test('desk landing, a second jump onto a physical monitor, and walking off', () => {
-  let state = { x: -6, y: 0, z: -13.35, velocity: 0 }
+  let state = { x: -5, y: 0, z: -13.35, velocity: 0 }
   // Walking into a desk cannot raise the player or pass through its side.
   state = advance(state, 30, 0, 4)
   expect(state.z).toBeLessThanOrEqual(-13.1)
@@ -58,7 +59,7 @@ test('bench and planter landings, solid walls, jumpable fences, and absolute map
 })
 
 test('vertical sweep catches thin tops and undersides, with no mid-air jump', () => {
-  const landing = verticalStep({ x: -6, y: 2.5, z: -12.25, velocity: -30 }, 0.1)
+  const landing = verticalStep({ x: -5, y: 2.5, z: -12.25, velocity: -30 }, 0.1)
   expect(landing.y).toBeCloseTo(1.48)
   expect(landing.velocity).toBe(0)
   const shelf: Box = { position: [0, 2.1, 0], size: [2, 0.2, 2], color: '#fff' }
@@ -67,10 +68,10 @@ test('vertical sweep catches thin tops and undersides, with no mid-air jump', ()
   expect(hit.velocity).toBe(0)
   const midair = { x: 0, y: 1, z: 5, velocity: -1 }
   expect(stepPhysics(midair, 0, 0, 1 / 60, true)).toEqual(stepPhysics(midair, 0, 0, 1 / 60))
-  expect(blocked(-6, -12.25, 0.84)).toBe(true)
-  expect(blocked(-6, -12.25, 1.48)).toBe(false)
+  expect(blocked(-5, -12.25, 0.84)).toBe(true)
+  expect(blocked(-5, -12.25, 1.48)).toBe(false)
   expect(colliders).toEqual([...walls, ...furniture, ...monitors])
-  expect(monitors).toHaveLength(4)
+  expect(monitors).toHaveLength(10)
   expect(blocked(NaN, 0)).toBe(true)
   expect(blocked(0, Infinity)).toBe(true)
   expect(blocked(0, 0, NaN)).toBe(true)
@@ -102,11 +103,12 @@ test('first-person jumps onto a desk and monitor, holds Space without bouncing, 
       await page.keyboard.up(key)
     }
   }
-  // Enter the studio doorway, then approach the northern desk from behind.
-  await walkUntil('KeyW', () => position.z <= -11)
-  await walkUntil('KeyA', () => position.x <= -3.5)
+  // Enter the studio doorway, take the lane beside the hallway wall
+  // (x between -3.25 and -2.45), then approach the nearest desk from behind.
+  await walkUntilSent(page, 'KeyW', 'z', '<=', -10.5)
+  await walkUntilSent(page, 'KeyA', 'x', '<=', -2.85)
   await walkUntil('KeyW', () => position.z <= -14)
-  await walkUntil('KeyA', () => position.x <= -6)
+  await walkUntil('KeyA', () => position.x <= -5)
   await walkUntil('KeyS', () => position.z >= -13.35)
   // Stop each short approach in the browser's own send tick, so a slow test
   // driver's round trip cannot overshoot the narrow landing area.
@@ -139,7 +141,7 @@ test('first-person jumps onto a desk and monitor, holds Space without bouncing, 
   await page.keyboard.press('Space')
   await walkUntil('KeyS', () => position.z >= -12.25)
   await expect.poll(() => position.y, poll).toBeCloseTo(1.48, 3)
-  await walkUntil('KeyD', () => position.x >= -3.8)
+  await walkUntil('KeyD', () => position.x >= -3)
   await expect.poll(() => position.y, poll).toBe(0)
   expect(samples.some(p => p.y > 2)).toBe(true)
   expect(samples.every(p => p.y >= 0 && p.y <= maxFeetHeight)).toBe(true)
