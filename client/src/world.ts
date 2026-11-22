@@ -3,6 +3,8 @@ export type Box = {
   size: [number, number, number]
   color: string
   kind?: 'table' | 'chair'
+  // Chairs only: radians around Y, same convention as player rotation (0 faces -Z).
+  facing?: number
 }
 
 export const WORLD_LIMIT = 23.5
@@ -10,7 +12,9 @@ export const PLAYER_RADIUS = 0.35
 export const box = (x: number, y: number, z: number, w: number, h: number, d: number, color: string): Box =>
   ({ position: [x, y, z], size: [w, h, d], color })
 const table = (...args: Parameters<typeof box>): Box => ({ ...box(...args), kind: 'table' })
-const chair = (...args: Parameters<typeof box>): Box => ({ ...box(...args), kind: 'chair' })
+const chair = (facing: number, ...args: Parameters<typeof box>): Box => ({ ...box(...args), kind: 'chair', facing })
+// Shared by rendering and seating: the cushion sits at 55% of the chair height and is 0.12 thick.
+export const chairSeatTop = (b: Box) => b.position[1] - b.size[1] / 2 + b.size[1] * 0.55 + 0.06
 
 // Openings are real gaps in the same geometry used for collision.
 // The lower front walls keep the fixed third-person camera useful (a dollhouse cutaway).
@@ -35,17 +39,18 @@ export const trees = [[-20, -17], [20, -17], [-20, -4], [20, -4], [-19, 16], [19
 export const planters = [[-4, 5.5], [4, 5.5], [-14, 2.8], [14, 2.8]] as const
 export const furniture: Box[] = [
   ...desks.map(([x, z]) => table(x, 0.42, z, 3.2, 0.84, 1.5, '#b98253')),
-  ...desks.map(([x, z]) => chair(x, 0.4, z + 1.25, 0.8, 0.8, 0.75, '#59796c')),
+  ...desks.map(([x, z]) => chair(0, x, 0.4, z + 1.25, 0.8, 0.8, 0.75, '#59796c')),
   table(9, 0.42, -11, 5.5, 0.84, 2.3, '#b98253'),
-  ...[6.8, 9, 11.2].flatMap(x => [-13, -9].map(z => chair(x, 0.4, z, 0.8, 0.8, 0.8, '#ae7964'))),
-  box(-11, 0.45, -2.8, 6, 0.9, 1.5, '#708d77'),
-  box(-14, 0.45, -0.5, 1.5, 0.9, 3, '#708d77'),
+  ...[6.8, 9, 11.2].flatMap(x => [-13, -9].map(z => chair(z < -11 ? Math.PI : 0, x, 0.4, z, 0.8, 0.8, 0.8, '#ae7964'))),
+  // Lounge sofas: seat height close to the chairs so avatars can sit on them.
+  box(-11, 0.275, -2.8, 6, 0.55, 1.5, '#708d77'),
+  box(-14, 0.275, -0.5, 1.5, 0.55, 3, '#708d77'),
   table(-9, 0.22, 0, 2.8, 0.44, 1.6, '#b98253'),
   box(-5, 0.4, 1, 1.5, 0.8, 1.5, '#c38a58'),
   box(10, 0.55, -4.9, 9, 1.1, 1.4, '#718476'),
   box(14.6, 1, -2.8, 1.4, 2, 1.4, '#e4dfd3'),
   table(8.5, 0.48, 0, 3.8, 0.96, 1.7, '#b98253'),
-  ...[6.8, 8.5, 10.2].map(x => chair(x, 0.35, 1.6, 0.7, 0.7, 0.7, '#d2ad6a')),
+  ...[6.8, 8.5, 10.2].map(x => chair(0, x, 0.35, 1.6, 0.7, 0.7, 0.7, '#d2ad6a')),
   // Outdoor picnic table and benches, off the clear entrance path.
   table(-10, 0.45, 11, 4.5, 0.9, 2, '#b98253'),
   ...[9.2, 12.8].map(z => box(-10, 0.25, z, 4.5, 0.5, 0.6, '#b98253')),
@@ -55,6 +60,48 @@ export const furniture: Box[] = [
   ...trees.map(([x, z]) => box(x, 1, z, 0.7, 2, 0.7, '#806147')),
   ...planters.map(([x, z]) => box(x, 0.4, z, 1.1, 0.8, 1.1, '#ad7658')),
 ]
+
+export type Seat = { x: number; z: number; height: number; facing: number }
+const seatRow = (xs: number[], z: number, height: number, facing: number) =>
+  xs.map(x => ({ x, z, height, facing }))
+const seatColumn = (x: number, zs: number[], height: number, facing: number) =>
+  zs.map(z => ({ x, z, height, facing }))
+// Seat points lie inside furniture colliders; seated players skip collision.
+// `height` is the cushion top the hips rest on. Points sit near the front edge
+// so the shins (0.26 below the knee, 0.26 ahead of the hips) hang clear of the seat.
+const chairForward = 0.15
+export const seats: Seat[] = [
+  ...furniture.filter(b => b.kind === 'chair').map(b => {
+    const facing = b.facing ?? 0
+    return {
+      x: b.position[0] - Math.sin(facing) * chairForward,
+      z: b.position[2] - Math.cos(facing) * chairForward,
+      height: chairSeatTop(b), facing,
+    }
+  }),
+  ...seatRow([-12.7, -10.9, -9.1], -2.35, 0.55, Math.PI), // lounge sofa
+  ...seatColumn(-13.55, [-1.2, 0.2], 0.55, -Math.PI / 2), // lounge side sofa
+  ...seatRow([-11.5, -10, -8.5], 9.25, 0.5, Math.PI), // picnic bench, house side
+  ...seatRow([-11.5, -10, -8.5], 12.75, 0.5, 0), // picnic bench, fence side
+  ...seatRow([8.8, 10, 11.2], 12.55, 0.6, 0), // garden sofa
+  ...seatColumn(12.85, [9.2, 10.4, 11.6], 0.6, Math.PI / 2), // garden sofa, short side
+]
+
+export function nearestSeat(x: number, z: number, maxDistance = 1.3) {
+  let best: Seat | null = null
+  let bestDistance = maxDistance
+  for (const seat of seats) {
+    const distance = Math.hypot(seat.x - x, seat.z - z)
+    if (distance <= bestDistance) {
+      best = seat
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
+// The seat a player occupies: used by avatars to find hip height.
+export const seatAt = (x: number, z: number) => nearestSeat(x, z, 0.3)
 
 // Screen geometry is shared by rendering and height-aware collision.
 export const monitors: Box[] = desks.map(([x, z]) =>

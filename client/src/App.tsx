@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import Office, { type ViewMode } from './Office'
+import Office, { useSeatHint, type ViewMode } from './Office'
 import Webcams, { WebcamSelfPreview } from './Webcams'
 import { connect, send, useNetwork } from './network'
 import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
@@ -24,6 +24,7 @@ export default function App() {
   const [gifCooldown, setGifCooldown] = useState(false)
   const { status, players, chats } = useNetwork()
   const voice = useVoice()
+  const seatHint = useSeatHint(s => s.hint)
   const log = useRef<HTMLDivElement>(null)
 
 
@@ -124,8 +125,10 @@ export default function App() {
         {editingAppearance && <AppearanceEditor value={appearance} onChange={changeAppearance} />}
       </dialog>
       </>}
+      {joined && seatHint && <div className="seat-hint" role="status">
+        Press <kbd>E</kbd> to {seatHint}</div>}
       {joined && <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span>·</span>
-        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate<br />
+        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate <span>·</span> <kbd>E</kbd> Sit<br />
         {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse / chat' : 'Click the scene to play · Click the chat to talk'}</div>}
       {!joined ? (
         <div className="overlay">

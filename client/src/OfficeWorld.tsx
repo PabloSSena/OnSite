@@ -15,14 +15,16 @@ function Furnishing({ data }: { data: Box }) {
   const [w, h, d] = data.size
   const seat = data.kind === 'chair'
   const top = seat ? h * 0.55 : h - 0.06
-  return <>
-    <Block data={box(x, y - h / 2 + top, z, w, 0.12, d, data.color)} />
+  // Parts are local to the piece so a chair's backrest turns with its facing,
+  // staying behind whoever sits in it.
+  return <group position={[x, 0, z]} rotation-y={data.facing ?? 0}>
+    <Block data={box(0, y - h / 2 + top, 0, w, 0.12, d, data.color)} />
     {[-1, 1].flatMap(sx => [-1, 1].map(sz =>
-      <Block key={`${sx}${sz}`} data={box(x + sx * (w / 2 - 0.12), y - h / 2 + top / 2,
-        z + sz * (d / 2 - 0.12), 0.12, top, 0.12, '#665846')} />
+      <Block key={`${sx}${sz}`} data={box(sx * (w / 2 - 0.12), y - h / 2 + top / 2,
+        sz * (d / 2 - 0.12), 0.12, top, 0.12, '#665846')} />
     ))}
-    {seat && <Block data={box(x, y + h * 0.25, z + d / 2 - 0.08, w, h * 0.5, 0.16, data.color)} />}
-  </>
+    {seat && <Block data={box(0, y + h * 0.25, d / 2 - 0.08, w, h * 0.5, 0.16, data.color)} />}
+  </group>
 }
 
 const surfaces = [
@@ -64,9 +66,9 @@ const details: Box[] = [
   box(8.8, 1.9, -5.75, 4.8, 0.1, 0.4, '#a47c53'),
   ...[7.2, 8, 8.8, 9.6, 10.4].map(x => box(x, 2.07, -5.75, 0.25, 0.25, 0.25, '#e5c99a')),
   // Sofa backs and pillows give the lounge a softer silhouette.
-  box(-11, 0.95, -3.4, 6, 0.65, 0.3, '#587761'),
-  box(-14.6, 0.95, -0.5, 0.3, 0.65, 3, '#587761'),
-  ...[-12.7, -10.9, -9.1].map(x => box(x, 0.98, -2.8, 0.65, 0.3, 0.55, '#e3bd7e')),
+  box(-11, 0.8, -3.4, 6, 0.6, 0.3, '#587761'),
+  box(-14.6, 0.8, -0.5, 0.3, 0.6, 3, '#587761'),
+  ...[-12.7, -10.9, -9.1].map(x => box(x, 0.75, -3.15, 0.65, 0.4, 0.2, '#e3bd7e')),
   box(-9.2, 0.48, 0, 0.8, 0.06, 0.5, '#68897c'),
   box(10, 0.75, 13.5, 4.6, 0.6, 0.3, '#5e7e6d'),
   // Porch posts frame the wide, permanently open entrance.
