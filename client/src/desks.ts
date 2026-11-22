@@ -51,12 +51,14 @@ export type DeskStyle = {
   mood: string
   status: DeskStatus
   poster: string
+  // A custom HTTPS image drawn over the preset; the preset shows if it cannot load.
+  wallpaperURL: string
 }
 export type DeskNote = { id: string; author: string; text: string; at: string; yours: boolean }
 export type Desk = { id: number; ownerName: string; online: boolean; style: DeskStyle | null; notes: DeskNote[] }
 
 const styleKeys: (keyof DeskStyle)[] = ['top', 'chairColor', 'lampColor', 'lampOn', 'keyboardColor',
-  'wallpaper', 'items', 'plate', 'mood', 'status', 'poster']
+  'wallpaper', 'items', 'plate', 'mood', 'status', 'poster', 'wallpaperURL']
 const has = (list: readonly { id: string }[], value: unknown) => list.some(entry => entry.id === value)
 const paletteColor = (value: unknown) => CLOTHING_COLORS.some(color => color.value === value)
 // Count code points like Go runes, so an emoji is one character on both sides.
@@ -72,8 +74,44 @@ export function parseDeskStyle(value: unknown): DeskStyle | null {
     !paletteColor(s.chairColor) || !paletteColor(s.lampColor) || !paletteColor(s.keyboardColor) ||
     typeof s.lampOn !== 'boolean' || typeof s.plate !== 'string' || typeof s.mood !== 'string' ||
     [...s.plate].length > PLATE_MAX || [...s.mood].length > MOOD_MAX ||
-    typeof s.poster !== 'string' || (s.poster !== '' && !validGIFURL(s.poster))) return null
+    typeof s.poster !== 'string' || (s.poster !== '' && !validGIFURL(s.poster)) ||
+    typeof s.wallpaperURL !== 'string' || (s.wallpaperURL !== '' && !validImageURL(s.wallpaperURL))) return null
   return { ...s, items: [...items] } as DeskStyle
+}
+
+// Keep aligned with validImageURL in server/desks.go: any plain HTTPS link.
+export function validImageURL(value: string): boolean {
+  if (value.length > 1500 || value.trim() !== value || /\s/.test(value)) return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !!url.hostname && !url.username && !url.password &&
+      !url.port && !url.hash
+  } catch {
+    return false
+  }
+}
+
+const images = new Map<string, Promise<HTMLImageElement>>()
+// Loads a wallpaper as a CORS image so WebGL may use it. Rejects when the host
+// does not allow embedding, the link is dead, or it takes longer than 15 seconds.
+export function loadWallpaper(url: string): Promise<HTMLImageElement> {
+  let pending = images.get(url)
+  if (!pending) {
+    pending = new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image()
+      const timer = setTimeout(() => { image.src = ''; reject(new Error('timeout')) }, 15000)
+      image.crossOrigin = 'anonymous'
+      image.referrerPolicy = 'no-referrer'
+      image.decoding = 'async'
+      image.onload = () => { clearTimeout(timer); resolve(image) }
+      image.onerror = () => { clearTimeout(timer); reject(new Error('blocked')) }
+      image.src = url
+    })
+    // Failures are not cached, so a retry can succeed after a network blip.
+    pending.catch(() => images.delete(url))
+    images.set(url, pending)
+  }
+  return pending
 }
 
 export function parseDesks(value: unknown): Desk[] | null {
@@ -165,42 +203,53 @@ function canvasTexture(w: number, h: number, paint: (ctx: CanvasRenderingContext
   return texture
 }
 
+// Draw an image to fill the area, cropping the overflow (CSS object-fit: cover).
+function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement, w: number, h: number) {
+  const scale = Math.max(w / image.naturalWidth, h / image.naturalHeight)
+  const sw = w / scale, sh = h / scale
+  ctx.drawImage(image, (image.naturalWidth - sw) / 2, (image.naturalHeight - sh) / 2, sw, sh, 0, 0, w, h)
+}
+
 // Monitor screen: wallpaper, owner name, and mood line. Redrawn only on change.
-export function screenTexture(style: DeskStyle | null, ownerName: string) {
-  return canvasTexture(256, 140, ctx => {
+// 512 px wide keeps text readable from behind the chair in first person and
+// downsizes any custom image, bounding GPU memory per desk.
+const SCREEN_W = 512, SCREEN_H = 266
+export function screenTexture(style: DeskStyle | null, ownerName: string, image: HTMLImageElement | null = null) {
+  return canvasTexture(SCREEN_W, SCREEN_H, ctx => {
     if (!style) {
       ctx.fillStyle = '#20303a'
-      ctx.fillRect(0, 0, 256, 140)
+      ctx.fillRect(0, 0, SCREEN_W, SCREEN_H)
       ctx.fillStyle = '#9fb6c2'
-      ctx.font = font(18)
       ctx.textAlign = 'center'
-      ctx.fillText('Free desk', 128, 64)
-      ctx.font = font(13)
-      ctx.fillText('Press E to claim', 128, 88)
+      ctx.font = font(44)
+      ctx.fillText('Free desk', SCREEN_W / 2, 120)
+      ctx.font = font(30)
+      ctx.fillText('Press E to claim', SCREEN_W / 2, 170)
       return
     }
-    paintWallpaper(ctx, style.wallpaper, 256, 140)
-    ctx.fillStyle = '#0d1520b0'
-    ctx.fillRect(0, 96, 256, 44)
+    if (image) drawCover(ctx, image, SCREEN_W, SCREEN_H)
+    else paintWallpaper(ctx, style.wallpaper, SCREEN_W, SCREEN_H)
+    ctx.fillStyle = '#0d1520c0'
+    ctx.fillRect(0, SCREEN_H - 92, SCREEN_W, 92)
     ctx.fillStyle = '#ffffff'
     ctx.textAlign = 'left'
-    ctx.font = font(14)
-    ctx.fillText(limit(ownerName, 24), 10, 114, 236)
-    ctx.font = font(12)
+    ctx.font = font(36)
+    ctx.fillText(limit(ownerName, 24), 18, SCREEN_H - 52, SCREEN_W - 36)
+    ctx.font = font(28)
     ctx.fillStyle = '#d7e3ea'
-    ctx.fillText(style.mood || '…', 10, 131, 236)
+    ctx.fillText(style.mood || '…', 18, SCREEN_H - 16, SCREEN_W - 36)
   })
 }
 
 export function plateTexture(text: string) {
-  return canvasTexture(256, 48, ctx => {
+  return canvasTexture(512, 96, ctx => {
     ctx.fillStyle = '#fff8e8'
-    ctx.fillRect(0, 0, 256, 48)
+    ctx.fillRect(0, 0, 512, 96)
     ctx.fillStyle = '#25333e'
-    ctx.font = font(26)
+    ctx.font = font(56)
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(text || ' ', 128, 26, 240)
+    ctx.fillText(text || ' ', 256, 52, 484)
   })
 }
 
@@ -216,4 +265,35 @@ export function nearestDesk(x: number, z: number, range = 2.3): number | null {
     }
   })
   return best
+}
+
+const noteColors = ['#fff2a8', '#ffd1dc', '#c9f2e3']
+// One sticky note as a real 3D texture: readable up close in first person,
+// hidden by walls, and never covering the HUD like a DOM overlay would.
+export function noteTexture(text: string, author: string, index: number) {
+  return canvasTexture(256, 208, ctx => {
+    ctx.fillStyle = noteColors[index % noteColors.length]
+    ctx.fillRect(0, 0, 256, 208)
+    ctx.fillStyle = '#3a3317'
+    ctx.font = font(24)
+    const words = text.split(/\s+/)
+    const lines: string[] = []
+    let line = ''
+    for (const word of words) {
+      const next = line ? `${line} ${word}` : word
+      if (ctx.measureText(next).width > 232 && line) {
+        lines.push(line)
+        line = word
+      } else line = next
+    }
+    if (line) lines.push(line)
+    if (lines.length > 5) {
+      lines.length = 5
+      lines[4] = `${lines[4]}…`
+    }
+    lines.forEach((l, i) => ctx.fillText(l, 12, 34 + i * 30, 232))
+    ctx.globalAlpha = 0.7
+    ctx.font = font(18)
+    ctx.fillText(`— ${limit(author, 20)}`, 12, 196, 232)
+  })
 }

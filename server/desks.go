@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -40,6 +42,7 @@ type deskStyle struct {
 	Mood          string    `json:"mood"`
 	Status        string    `json:"status"`
 	Poster        string    `json:"poster"`
+	WallpaperURL  string    `json:"wallpaperURL"`
 }
 
 type deskNote struct {
@@ -71,12 +74,12 @@ func defaultDeskStyle(plate string) deskStyle {
 // parseDeskStyle accepts only a complete, exact object, like parseAppearance.
 func parseDeskStyle(raw json.RawMessage) (deskStyle, bool) {
 	var s deskStyle
-	if len(raw) == 0 || len(raw) > 4096 {
+	if len(raw) == 0 || len(raw) > 6144 {
 		return s, false
 	}
 	var fields map[string]json.RawMessage
 	keys := []string{"top", "chairColor", "lampColor", "lampOn", "keyboardColor", "wallpaper",
-		"items", "plate", "mood", "status", "poster"}
+		"items", "plate", "mood", "status", "poster", "wallpaperURL"}
 	if json.Unmarshal(raw, &fields) != nil || len(fields) != len(keys) {
 		return s, false
 	}
@@ -106,7 +109,8 @@ func parseDeskStyle(raw json.RawMessage) (deskStyle, bool) {
 		clothingColor(s.ChairColor) && clothingColor(s.LampColor) && clothingColor(s.KeyboardColor) &&
 		oneOf(s.Wallpaper, "dawn", "ocean", "forest", "grid", "stripes", "dots") &&
 		oneOf(s.Status, "available", "busy", "away") &&
-		(s.Poster == "" || validGIFURL(s.Poster))
+		(s.Poster == "" || validGIFURL(s.Poster)) &&
+		(s.WallpaperURL == "" || validImageURL(s.WallpaperURL))
 }
 
 func validToken(token string) bool {
@@ -344,4 +348,15 @@ func saveDesks(path string, desks [len(deskPositions)]*desk) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// validImageURL accepts any plain HTTPS link. The server never fetches it; each
+// browser loads it as a CORS texture, and the image host sees viewers' IPs.
+func validImageURL(value string) bool {
+	if len(value) > 1500 || strings.TrimSpace(value) != value || strings.ContainsAny(value, " \t\r\n") {
+		return false
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme == "https" && u.Host != "" && u.Hostname() != "" && u.User == nil &&
+		(u.Port() == "" || u.Port() == "443") && u.Fragment == ""
 }

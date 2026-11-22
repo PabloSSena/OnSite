@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { openMenu } from './helpers'
+import { openMenu, walkUntilSent } from './helpers'
 
 test('walk from the garden into a furnished room and back outside', async ({ page }) => {
   test.setTimeout(240000)
@@ -35,7 +35,8 @@ test('walk from the garden into a furnished room and back outside', async ({ pag
     }
   }
   // A real networked walk through the entrance, up the hall, and through a side doorway.
-  await walk('KeyW', () => position.z < -10.5)
+  // Stop precisely in the doorway band: the studio desks start just north of it.
+  await walkUntilSent(page, 'KeyW', 'z', '<=', -10.5)
   await walk('KeyA', () => position.x < -3.5)
   expect(position.x).toBeLessThan(-2)
   await page.screenshot({ path: 'test-results/world-studio.png' })

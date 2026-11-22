@@ -16,7 +16,8 @@ func validStyleJSON(t *testing.T, change func(map[string]any)) json.RawMessage {
 		"top": "walnut", "chairColor": "#ff7c9a", "lampColor": "#72baff", "lampOn": false,
 		"keyboardColor": "#25333e", "wallpaper": "ocean", "items": []string{"cactus", "duck", "lavalamp"},
 		"plate": "Ana 🌵", "mood": "shipping things", "status": "busy",
-		"poster": "https://media.tenor.com/example/desk.gif",
+		"poster":       "https://media.tenor.com/example/desk.gif",
+		"wallpaperURL": "https://i.imgur.com/example.png",
 	}
 	if change != nil {
 		change(style)
@@ -53,6 +54,8 @@ func TestDeskStyleValidation(t *testing.T) {
 		"lamp as string":     func(m map[string]any) { m["lampOn"] = "yes" },
 		"poster host":        func(m map[string]any) { m["poster"] = "https://evil.test/a.gif" },
 		"absurd mood length": func(m map[string]any) { m["mood"] = strings.Repeat("a", 1000) },
+		"http wallpaper":     func(m map[string]any) { m["wallpaperURL"] = "http://i.imgur.com/a.png" },
+		"null wallpaper":     func(m map[string]any) { m["wallpaperURL"] = nil },
 	} {
 		if _, ok := parseDeskStyle(validStyleJSON(t, change)); ok {
 			t.Errorf("%s accepted", name)
@@ -317,5 +320,37 @@ func TestDeskPersistence(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatal("corrupt file should no longer be at the original path")
 		}
+	}
+}
+
+func TestWallpaperURLPolicy(t *testing.T) {
+	for _, value := range []string{
+		"https://i.imgur.com/abc.png",
+		"https://images.unsplash.com/photo-1506744038136?w=1200&q=80",
+		"https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg",
+		"https://example.com:443/wall",
+	} {
+		if !validImageURL(value) {
+			t.Errorf("valid wallpaper rejected: %q", value)
+		}
+	}
+	for _, value := range []string{
+		"", "http://i.imgur.com/a.png", "javascript:alert(1)", "data:image/png;base64,AAAA",
+		"https://user:pass@i.imgur.com/a.png", "https://i.imgur.com:8443/a.png",
+		"https://i.imgur.com/a.png#frag", " https://i.imgur.com/a.png", "https:///nohost.png",
+		"https://i.imgur.com/a b.png", "https://i.imgur.com/" + strings.Repeat("a", 1500),
+	} {
+		if validImageURL(value) {
+			t.Errorf("invalid wallpaper accepted: %q", value)
+		}
+	}
+	// Desks saved before wallpaperURL existed still load, with no custom image.
+	path := filepath.Join(t.TempDir(), "desks.json")
+	old := `{"version":1,"desks":[{"ownerHash":"` + hashToken(tokenA) + `","ownerName":"Ana","style":{"top":"oak","chairColor":"#25333e","lampColor":"#ffb86b","lampOn":true,"keyboardColor":"#fff0d3","wallpaper":"dawn","items":["none","none","none"],"plate":"Ana","mood":"","status":"available","poster":""},"notes":[]}]}`
+	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if loaded := loadDesks(path); loaded[0] == nil || loaded[0].Style.WallpaperURL != "" {
+		t.Fatal("a pre-wallpaperURL file should still load")
 	}
 }

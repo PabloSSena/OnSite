@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { CLOTHING_COLORS } from './appearance'
 import {
-  DESK_ITEMS, DESK_STATUSES, DESK_TOPS, MOOD_MAX, NOTE_MAX, PLATE_MAX, WALLPAPERS, limit, statusColor,
+  DESK_ITEMS, DESK_STATUSES, DESK_TOPS, MOOD_MAX, NOTE_MAX, PLATE_MAX, WALLPAPERS, limit, loadWallpaper,
+  statusColor, validImageURL,
   type Desk, type DeskItem, type DeskNote, type DeskStyle,
 } from './desks'
 import { validGIFURL } from './gif'
@@ -29,6 +30,15 @@ export function DeskEditor({ desk }: { desk: Desk }) {
   const [posterError, setPosterError] = useState('')
   const pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const latest = useRef(style)
+  const [wallpaperURL, setWallpaperURL] = useState(desk.style?.wallpaperURL ?? '')
+  const [wallpaperStatus, setWallpaperStatus] = useState<
+    { kind: 'idle' | 'loading' | 'applied' } | { kind: 'error'; message: string }>({ kind: 'idle' })
+  const [confirmRelease, setConfirmRelease] = useState(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   useEffect(() => () => {
     // Flush a debounced text edit when the dialog closes.
     if (pending.current) {
@@ -60,6 +70,25 @@ export function DeskEditor({ desk }: { desk: Desk }) {
     }
     setPosterError('')
     update({ poster: url })
+  }
+  // Test-load the image in this browser first, so a blocked link never reaches friends.
+  async function applyWallpaper(e: FormEvent) {
+    e.preventDefault()
+    const url = wallpaperURL.trim()
+    if (!validImageURL(url)) {
+      setWallpaperStatus({ kind: 'error', message: 'Use a full https:// link to an image.' })
+      return
+    }
+    setWallpaperStatus({ kind: 'loading' })
+    try {
+      await loadWallpaper(url)
+    } catch {
+      setWallpaperStatus({ kind: 'error', message: "This site doesn't allow embedding its images (or the link is broken). Try Imgur or Unsplash." })
+      return
+    }
+    if (!mounted.current) return
+    setWallpaperStatus({ kind: 'applied' })
+    update({ wallpaperURL: url })
   }
   const palette = (key: 'chairColor' | 'lampColor' | 'keyboardColor', label: string) =>
     <fieldset className="appearance-palette"><legend>{label}</legend>
@@ -96,7 +125,7 @@ export function DeskEditor({ desk }: { desk: Desk }) {
     </fieldset>
     {palette('chairColor', 'Chair color')}
     <div className="appearance-selects">
-      <div className="appearance-select"><label htmlFor={`${prefix}-wallpaper`}>Wallpaper</label>
+      <div className="appearance-select"><label htmlFor={`${prefix}-wallpaper`}>Preset wallpaper</label>
         <select id={`${prefix}-wallpaper`} value={style.wallpaper}
           onChange={e => update({ wallpaper: e.target.value as DeskStyle['wallpaper'] })}>
           {WALLPAPERS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}
@@ -105,6 +134,27 @@ export function DeskEditor({ desk }: { desk: Desk }) {
       <label className="appearance-backpack"><input type="checkbox" checked={style.lampOn}
         onChange={e => update({ lampOn: e.target.checked })} /> Lamp on</label>
     </div>
+    <form className="desk-poster-form" onSubmit={applyWallpaper}>
+      <label htmlFor={`${prefix}-wallpaper-url`}>Wallpaper image link</label>
+      <div>
+        <input id={`${prefix}-wallpaper-url`} maxLength={1500} value={wallpaperURL}
+          placeholder="https://i.imgur.com/….jpg" aria-describedby={`${prefix}-wallpaper-status`}
+          onChange={e => { setWallpaperURL(e.target.value); setWallpaperStatus({ kind: 'idle' }) }} />
+        <button type="submit" disabled={wallpaperStatus.kind === 'loading' || !wallpaperURL.trim()}>Apply</button>
+        {style.wallpaperURL && <button type="button" onClick={() => {
+          setWallpaperURL('')
+          setWallpaperStatus({ kind: 'idle' })
+          update({ wallpaperURL: '' })
+        }}>Remove</button>}
+      </div>
+      <p id={`${prefix}-wallpaper-status`} className={wallpaperStatus.kind === 'error' ? 'gif-error' : 'desk-hint'}
+        role={wallpaperStatus.kind === 'error' ? 'alert' : 'status'}>
+        {wallpaperStatus.kind === 'loading' ? 'Loading…'
+          : wallpaperStatus.kind === 'error' ? wallpaperStatus.message
+            : wallpaperStatus.kind === 'applied' ? 'Wallpaper applied.'
+              : 'Any HTTPS image. Animated GIFs show a still frame; use the poster for animation. The preset shows if the image cannot load.'}
+      </p>
+    </form>
     {palette('lampColor', 'Lamp color')}
     {palette('keyboardColor', 'Keyboard color')}
     <div className="appearance-selects">
@@ -123,11 +173,17 @@ export function DeskEditor({ desk }: { desk: Desk }) {
     </form>
     <h3>Notes from friends</h3>
     <NoteList desk={desk} canRemove={() => true} />
-    <button type="button" className="desk-release" onClick={() => {
-      if (pending.current) clearTimeout(pending.current)
-      pending.current = undefined
-      send({ type: 'desk-release', desk: desk.id })
-    }}>Release desk</button>
+    {confirmRelease
+      ? <div className="desk-release-confirm" role="group" aria-label="Confirm release">
+        <p>Release this desk? Its style and notes will be deleted.</p>
+        <button type="button" className="desk-release" onClick={() => {
+          if (pending.current) clearTimeout(pending.current)
+          pending.current = undefined
+          send({ type: 'desk-release', desk: desk.id })
+        }}>Yes, release my desk</button>
+        <button type="button" onClick={() => setConfirmRelease(false)}>Keep it</button>
+      </div>
+      : <button type="button" className="desk-release" onClick={() => setConfirmRelease(true)}>Release desk</button>}
   </section>
 }
 

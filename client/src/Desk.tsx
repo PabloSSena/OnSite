@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Furnishing, Block } from './Blocks'
 import { DeskItemModel } from './DeskItems'
-import { plateTexture, screenTexture, statusColor, topColor, type Desk } from './desks'
+import { loadWallpaper, noteTexture, plateTexture, screenTexture, statusColor, topColor, type Desk } from './desks'
 import { localPlayer } from './network'
 import { box, deskChairs, desks, deskTables, monitors } from './world'
 import './desks.css'
@@ -22,13 +22,32 @@ function Poster({ url, owner }: { url: string; owner: string }) {
   </div>
 }
 
+function StickyNote({ text, author, index }: { text: string; author: string; index: number }) {
+  const texture = useMemo(() => noteTexture(text, author, index), [text, author, index])
+  useEffect(() => () => texture.dispose(), [texture])
+  return <mesh position={[0.62, 1.32 - index * 0.19, -0.195]} rotation={[0, 0, (index % 2 ? 1 : -1) * 0.06]}>
+    <planeGeometry args={[0.22, 0.18]} />
+    <meshBasicMaterial map={texture} toneMapped={false} />
+  </mesh>
+}
+
 export default function DeskView({ index, desk, annotations }: { index: number; desk?: Desk; annotations: boolean }) {
   const [x, z] = desks[index]
   const style = desk?.style ?? null
   const owner = desk?.ownerName ?? ''
   // Desk messages arrive as fresh objects; redraw textures only when the content changes.
   const styleKey = JSON.stringify(style)
-  const screen = useMemo(() => screenTexture(style, owner), [styleKey, owner])
+  const wallpaperURL = style?.wallpaperURL ?? ''
+  const [image, setImage] = useState<{ url: string; element: HTMLImageElement } | null>(null)
+  useEffect(() => {
+    if (!wallpaperURL) return
+    let current = true
+    // A failed image silently keeps the preset wallpaper for this viewer.
+    loadWallpaper(wallpaperURL).then(element => { if (current) setImage({ url: wallpaperURL, element }) }, () => {})
+    return () => { current = false }
+  }, [wallpaperURL])
+  const wallpaper = image && image.url === wallpaperURL ? image.element : null
+  const screen = useMemo(() => screenTexture(style, owner, wallpaper), [styleKey, owner, wallpaper])
   const plate = useMemo(() => style ? plateTexture(style.plate) : null, [styleKey])
   useEffect(() => () => screen.dispose(), [screen])
   useEffect(() => () => plate?.dispose(), [plate])
@@ -86,22 +105,21 @@ export default function DeskView({ index, desk, annotations }: { index: number; 
         <meshStandardMaterial color={light} emissive={light} emissiveIntensity={desk?.online ? 1.2 : 0.2} />
       </mesh>
       {plate && <mesh position={[0, SURFACE + 0.05, 0.6]} rotation={[-0.35, 0, 0]}>
-        <planeGeometry args={[0.55, 0.1]} />
+        <planeGeometry args={[0.66, 0.124]} />
         <meshBasicMaterial map={plate} toneMapped={false} />
       </mesh>}
       {style?.items.map((item, i) => <group key={i} position={[slots[i][0], SURFACE, slots[i][1]]}>
         <DeskItemModel item={item} />
       </group>)}
-      {annotations && style?.poster && <Html position={[0, 2.15, -0.3]} center distanceFactor={9}
+      {/* transform: a fixed real-world size above the monitor (≈0.6 m wide) instead
+          of a screen overlay that grows huge in first person. 1 CSS px = 2/400 m. */}
+      {annotations && style?.poster && <Html transform position={[0, 1.8, -0.32]} distanceFactor={2} zIndexRange={[0, 0]}
         style={{ pointerEvents: 'none' }}>
         <div ref={keep}><Poster url={style.poster} owner={owner} /></div>
       </Html>}
-      {annotations && desk && desk.notes.length > 0 && <Html position={[-0.72, 1.3, -0.2]} center distanceFactor={7}
-        style={{ pointerEvents: 'none' }}>
-        <div ref={keep} className="desk-notes" aria-label={`Notes on ${owner}'s desk`}>
-          {desk.notes.slice(-3).map(note => <p key={note.id}><span>{note.text}</span><b>{note.author}</b></p>)}
-        </div>
-      </Html>}
+      {/* The three newest notes, down the right edge of the monitor: clear of the left panel. */}
+      {desk?.notes.slice(-3).reverse().map((note, i) =>
+        <StickyNote key={note.id} text={note.text} author={note.author} index={i} />)}
     </group>
   </>
 }

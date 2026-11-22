@@ -2,7 +2,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { localPlayer, send, useNetwork } from './network'
-import { stepPhysics } from './world'
+import { desks, stepPhysics } from './world'
 import WallMirror from './Mirror'
 import Avatar, { FirstPersonFists } from './Avatar'
 import { OfficeWorld } from './OfficeWorld'
@@ -17,8 +17,8 @@ export type DeskCallbacks = {
   onNearDesk: (desk: number | null) => void
 }
 
-function Controller({ obstacles, viewMode, desk }: {
-  obstacles: React.RefObject<THREE.Group | null>; viewMode: ViewMode; desk: DeskCallbacks
+function Controller({ obstacles, viewMode, desk, focusDesk }: {
+  obstacles: React.RefObject<THREE.Group | null>; viewMode: ViewMode; desk: DeskCallbacks; focusDesk: number | null
 }) {
   const deskCallbacks = useRef(desk)
   deskCallbacks.current = desk
@@ -36,6 +36,45 @@ function Controller({ obstacles, viewMode, desk }: {
   useEffect(() => {
     actions.current = { jump: false, left: false, right: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 }
   }, [id])
+  // First person stays first person while a desk panel is open: the view turns
+  // (instantly) to look at the desk, centered in the screen area the panels leave
+  // uncovered, and the previous look direction returns when the panel closes.
+  const savedLook = useRef<{ yaw: number; pitch: number } | null>(null)
+  useEffect(() => {
+    if (viewMode !== 'first-person') return
+    if (focusDesk === null) {
+      if (savedLook.current) look.current = savedLook.current
+      savedLook.current = null
+      return
+    }
+    savedLook.current ??= { ...look.current }
+    // Wait one frame so the panel has its final layout before measuring it.
+    const frame = requestAnimationFrame(() => {
+      const [deskX, deskZ] = desks[focusDesk]
+      const ex = localPlayer.x, ey = 1.4 + localPlayer.y, ez = localPlayer.z
+      const tx = deskX - ex, ty = 1.0 - ey, tz = deskZ - 0.1 - ez
+      let yaw = Math.atan2(-tx, -tz)
+      let pitch = Math.atan2(ty, Math.hypot(tx, tz))
+      const view = gl.domElement.getBoundingClientRect()
+      let left = view.left, right = view.right, bottom = view.bottom
+      const panel = document.querySelector('.desk-panel')?.getBoundingClientRect()
+      const chat = document.querySelector('.chat')?.getBoundingClientRect()
+      const middleX = view.left + view.width / 2
+      if (panel && panel.width < view.width * 0.8 && panel.right < middleX + view.width * 0.25) left = panel.right
+      else if (panel && panel.top > view.top + view.height * 0.3) bottom = panel.top // mobile bottom sheet
+      if (chat && chat.left > middleX && chat.left > left) right = chat.left
+      const tanHalf = Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov / 2))
+      const ndcX = ((left + right) / 2 - middleX) / (view.width / 2)
+      const ndcY = ((view.top + bottom) / 2 - (view.top + view.height / 2)) / (view.height / 2)
+      yaw += Math.atan(ndcX * tanHalf * (view.width / view.height))
+      pitch += Math.atan(ndcY * tanHalf)
+      look.current = {
+        yaw: THREE.MathUtils.euclideanModulo(yaw + Math.PI, Math.PI * 2) - Math.PI,
+        pitch: THREE.MathUtils.clamp(pitch, -Math.PI / 2 + 0.05, Math.PI / 2 - 0.05),
+      }
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusDesk, viewMode, camera, gl])
   useEffect(() => {
     const punch = (e: PointerEvent) => {
       if (document.querySelector('dialog[open]') || document.activeElement?.closest('input, textarea, select, button, [contenteditable="true"]')) return
@@ -59,7 +98,8 @@ function Controller({ obstacles, viewMode, desk }: {
     const canvas = gl.domElement
     look.current = { yaw: localPlayer.rotation, pitch: 0 }
     const lock = (e: MouseEvent) => {
-      if (e.button !== 0 || document.activeElement?.closest('input, textarea, button, [contenteditable="true"]')) return
+      if (e.button !== 0 || document.querySelector('dialog[open]') ||
+        document.activeElement?.closest('input, textarea, button, [contenteditable="true"]')) return
       if (useNetwork.getState().status !== 'online' || document.pointerLockElement === canvas) return
       // A denied request must not leave an unhandled promise rejection.
       canvas.requestPointerLock()?.catch(() => {})
@@ -225,7 +265,7 @@ function Controller({ obstacles, viewMode, desk }: {
   return null
 }
 
-function Scene({ viewMode, desk }: { viewMode: ViewMode; desk: DeskCallbacks }) {
+function Scene({ viewMode, desk, focusDesk }: { viewMode: ViewMode; desk: DeskCallbacks; focusDesk: number | null }) {
   // Mount DOM annotations only after Canvas has its final event/portal target.
   const connected = useThree(s => s.events.connected)
   const players = useNetwork(s => s.players)
@@ -241,7 +281,7 @@ function Scene({ viewMode, desk }: { viewMode: ViewMode; desk: DeskCallbacks }) 
         shadow-camera-top={30} shadow-camera-bottom={-30} shadow-camera-far={80} shadow-normalBias={0.04} />
       <OfficeWorld obstacles={obstacles} annotations={connected} />
       <WallMirror />
-      <Controller obstacles={obstacles} viewMode={viewMode} desk={desk} />
+      <Controller obstacles={obstacles} viewMode={viewMode} desk={desk} focusDesk={focusDesk} />
       {connected && Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id}
         firstPerson={p.id === id && viewMode === 'first-person'} />)}
       <WorldCameras viewMode={viewMode} />
@@ -250,10 +290,12 @@ function Scene({ viewMode, desk }: { viewMode: ViewMode; desk: DeskCallbacks }) 
   )
 }
 
-export default function Office({ viewMode, desk }: { viewMode: ViewMode; desk: DeskCallbacks }) {
+export default function Office({ viewMode, desk, focusDesk }: {
+  viewMode: ViewMode; desk: DeskCallbacks; focusDesk: number | null
+}) {
   return (
     <Canvas shadows dpr={[1, 1.5]} camera={{ position: [0, 7, 13], fov: 55, near: 0.1, far: 100 }}>
-      <Scene viewMode={viewMode} desk={desk} />
+      <Scene viewMode={viewMode} desk={desk} focusDesk={focusDesk} />
     </Canvas>
   )
 }

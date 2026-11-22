@@ -102,7 +102,7 @@ Client → server (all take `desk`, an integer 0–9; invalid input is silently 
   (clients offer E at 2.3). The desk gets the default style with the player's name on the plate.
 - `desk-release`: owner only. Clears the style and all notes.
 - `desk-update`: owner only, `style` is a complete desk style. At most 5 per second;
-  unchanged styles are not rebroadcast. Distance is not checked (edit from the menu).
+  unchanged styles are not rebroadcast. Distance is not checked.
 - `desk-note`: `text` up to 80 characters (cleaned like chat). Any player with a token
   within 2.6 units of an owned desk. At most one note every 5 seconds per connection;
   each desk keeps its 6 newest notes.
@@ -116,7 +116,7 @@ Each desk is `{id, ownerName, online, style, notes}`; `style` is `null` for a fr
 status light shows grey otherwise). Notes are `{id, author, text, at, yours}`, where
 `yours` is computed for the recipient.
 
-**Desk style**: exactly these 11 fields, at most 4,096 JSON bytes:
+**Desk style**: exactly these 12 fields, at most 6,144 JSON bytes:
 - `top`: `oak`, `walnut`, `white`, `black`, `mint`, `apricot`, `lavender`, `sky`, or `rose`.
 - `chairColor`, `lampColor`, `keyboardColor`: an appearance clothing color.
 - `lampOn`: boolean.
@@ -127,6 +127,14 @@ status light shows grey otherwise). Notes are `{id, author, text, at, yours}`, w
   truncated by the server.
 - `status`: `available`, `busy`, or `away`.
 - `poster`: `""` or a URL accepted by the `gif` rules.
+- `wallpaperURL`: `""` or any HTTPS link (at most 1,500 bytes; no credentials, nonstandard
+  port, fragment, or whitespace). The server never fetches it. Each browser loads it as a
+  CORS image (`crossOrigin="anonymous"`, no referrer), crops it to cover the screen at
+  512 px wide, and silently shows the preset `wallpaper` if it cannot load. Hosts that
+  do not send `Access-Control-Allow-Origin` cannot be used; the editor test-loads a link
+  before sending it. Animated images show one frame. Every viewer in the room loads
+  the image, so its host sees their IP addresses. Desk files saved before this field
+  existed still load.
 
 Missing, null, unknown, mistyped, or out-of-list values reject the whole update.
 All furniture and props are procedural; posters load from the allowed GIF hosts

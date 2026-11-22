@@ -53,7 +53,14 @@ export default function App() {
     },
   }), [])
   useEffect(() => {
-    if (deskPanel && !deskDialog.current?.open) deskDialog.current?.showModal()
+    // Non-modal, so the desk stays visible (and live) beside the panel.
+    if (!deskPanel) return
+    if (!deskDialog.current?.open) deskDialog.current?.show()
+    const escape = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') deskDialog.current?.close()
+    }
+    window.addEventListener('keydown', escape)
+    return () => window.removeEventListener('keydown', escape)
   }, [deskPanel])
   useEffect(() => {
     // Close the panel if the desk is released or changes hands while it is open.
@@ -120,7 +127,7 @@ export default function App() {
   }
   return (
     <main>
-      {joined && <Office viewMode={viewMode} desk={deskCallbacks} />}
+      {joined && <Office viewMode={viewMode} desk={deskCallbacks} focusDesk={deskPanel?.id ?? null} />}
       {joined && <>
       <aside className="game-menu" aria-label="Game controls">
         <button className="menu-toggle" aria-expanded={menuOpen} aria-controls="game-controls"
@@ -136,8 +143,6 @@ export default function App() {
             setEditingAppearance(true)
             customization.current?.showModal()
           }}>Customize character</button>
-          <button disabled={myDesk === null} title={myDesk === null ? 'Walk up to a free desk and press E to claim it' : undefined}
-            onClick={() => myDesk !== null && openDesk('edit', myDesk)}>My desk</button>
           <button onClick={() => { setMenuOpen(false); setJoined(false) }}>Leave</button>
         </div>
       <section className="voice" aria-label="Voice chat">
@@ -168,7 +173,7 @@ export default function App() {
         </div>
         {editingAppearance && <AppearanceEditor value={appearance} onChange={changeAppearance} />}
       </dialog>
-      <dialog ref={deskDialog} className="customization-dialog desk-dialog panel"
+      <dialog ref={deskDialog} className="desk-panel panel"
         aria-label={deskPanel?.mode === 'edit' ? 'Customize your desk' : 'Desk notes'}
         onClose={() => setDeskPanel(null)}>
         <div className="customization-title">
