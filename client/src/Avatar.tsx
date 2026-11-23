@@ -9,6 +9,7 @@ import { BeerBottle } from './Fridge'
 import GIFBubble from './GIFBubble'
 import { defaultAppearance } from './appearance'
 import { advanceMouth } from './speechMotion'
+import { BEER_GRIP, beerArmPose, firstPersonBeerPose } from './beerMotion'
 
 const ink = '#25333e'
 
@@ -105,15 +106,15 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
       const swing = Math.cos(state.phase + i * Math.PI) * stride * 0.5 + state.air * 0.4
       const hit = i === 1 ? punch : punchLeft
       if (i === 1 && holding) {
-        // Carry the bottle in front, then fold the arm up to the mouth for a sip.
-        const shoulder = 0.35 + sip * 0.75 + swing * 0.2 * (1 - sip)
-        const elbow = 1 + sip * 0.95
-        shoulders.current[i]!.rotation.set(shoulder, 0, side * (0.1 - sip * 0.12))
-        elbows.current[i]!.rotation.x = elbow
-        bottle.current.rotation.x = -(shoulder + elbow) + sip * 1.6
+        const mouth = new THREE.Vector3(0, -0.07, -0.218)
+          .applyQuaternion(head.current.quaternion).add(head.current.position)
+        const pose = beerArmPose(sip, swing, mouth)
+        shoulders.current[i]!.rotation.copy(pose.shoulder)
+        elbows.current[i]!.rotation.x = pose.elbow
+        bottle.current.quaternion.copy(pose.bottle)
         continue
       }
-      shoulders.current[i]!.rotation.set(swing * (1 - hit) + hit * 1.55, 0, side * (0.1 + state.air * 0.2))
+      shoulders.current[i]!.rotation.set(swing * (1 - hit) + hit * 1.55, 0, side * (0.1 + state.air * 0.2), 'XYZ')
       elbows.current[i]!.rotation.x = -(0.25 + state.air * 0.35) * (1 - hit)
     }
     bottle.current.visible = holding
@@ -294,7 +295,7 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
                   <meshStandardMaterial color={skin} roughness={0.9} flatShading />
                 </mesh>
                 {/* Always mounted so layer assignment covers it; visibility follows `holding`. */}
-                {side === 1 && <group ref={bottle} position={[0, -0.26, -0.03]} visible={false}>
+                {side === 1 && <group ref={bottle} position={[0, -BEER_GRIP, 0]} visible={false}>
                   <BeerBottle />
                 </group>}
               </group>
@@ -337,12 +338,17 @@ export function FirstPersonFists() {
       const side = i === 0 ? -1 : 1
       const punch = i === 1 && holding ? 0 : punchExtension(i === 1 ? localPlayer.punch : localPlayer.punchLeft)
       const sway = Math.sin(state.phase + i * Math.PI) * state.stride * 0.012 * (1 - state.air)
-      const raise = i === 1 ? sip : 0
-      // A sip brings the bottle up toward the centre of the view and tips it back.
-      hands.current[i]!.position.set(side * (0.18 - punch * 0.08 - raise * 0.13),
-        -0.18 + sway + punch * 0.06 + raise * 0.1 - state.landing * 0.025 + Math.sin(clock.elapsedTime * 1.7) * 0.003,
-        -0.65 - punch * 0.3 + raise * 0.22)
-      hands.current[i]!.rotation.x = punch * -0.2 + raise * 1.1
+      const bob = sway - state.landing * 0.025 + Math.sin(clock.elapsedTime * 1.7) * 0.003
+      if (i === 1 && holding) {
+        const pose = firstPersonBeerPose(sip)
+        hands.current[i]!.position.copy(pose.position)
+        hands.current[i]!.position.y += bob * (1 - sip)
+        hands.current[i]!.rotation.copy(pose.rotation)
+      } else {
+        hands.current[i]!.position.set(side * (0.18 - punch * 0.08),
+          -0.18 + bob + punch * 0.06, -0.65 - punch * 0.3)
+        hands.current[i]!.rotation.set(punch * -0.2, 0, 0)
+      }
     }
     bottle.current.visible = holding
   })
