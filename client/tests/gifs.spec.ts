@@ -105,6 +105,7 @@ test('first-person GIF picker supports paste, persistent recents, and one-click 
   await recent.click()
   await expect.poll(() => sent).toEqual([url, url])
   await expect(page.getByRole('button', { name: /^Send recent GIF \d+$/ })).toHaveCount(1)
+  await page.screenshot({ path: 'test-results/gif-picker-first-person.png' })
   await page.reload()
   await join()
   await openGIFs(page)

@@ -146,13 +146,15 @@ before running smoke/browser checks against that instance.
 
 ### GIF reactions
 
-Open the dedicated **GIF** picker and paste a supported direct HTTPS `.gif` link to show an
+Press **Escape** to release the mouse, open **GIFs**, and paste a supported direct HTTPS `.gif` link to show an
 animated reaction above your avatar for 8 seconds, visible to everyone currently
 connected. Supported media hosts: Tenor, GIPHY, and Discord (see the
 [protocol](docs/protocol.md) for the exact allowlist). Use **Copy image address**,
 not a GIF share-page URL. No API key is needed.
-The picker keeps recent links in localStorage on this browser, bounded to 24
-entries, so you can reuse them. This is local link history, not shared chat history.
+After the server accepts your reaction, the picker keeps its link in localStorage
+on this browser, bounded to 24 unique entries. Click a recent thumbnail to send it
+again. History survives refreshes but is not shared across browsers or site addresses.
+This is local link history, not shared chat history.
 Reactions are limited to one every 2 seconds and replace your previous GIF.
 Images load from the external host, which receives viewers' IP addresses.
 Expired/broken links show “GIF unavailable”; no uploads or link scraping are provided.
@@ -236,9 +238,10 @@ cd client
 npx playwright install chromium
 npm run test:e2e
 ```
-The existing browser suite includes joining, visible remote movement, and leaving
-without JavaScript errors. Its legacy text-chat assertions need updating for the
-GIF-only interface; the suite is not evidence that text chat is supported.
+The browser suite includes joining, visible remote movement, and leaving without
+JavaScript errors. GIF checks cover clipboard paste in first person, delivery to
+another player, recent-thumbnail reuse, persistence across refreshes, and the
+absence of text-chat controls.
 Webcam tests use Chromium's fake camera and check video reaching a late viewer,
 two-way sharing, toggling, track cleanup on leave/disconnect, camera-off
 reconnection, and a simulated permission denial. Physical cameras and TURN across
