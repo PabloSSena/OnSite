@@ -1,4 +1,4 @@
-// Real integration through the proxy: two clients, movement, chat, leaving, reconnection.
+// Real integration through the proxy: two clients, movement, GIFs, leaving, reconnection.
 import assert from 'node:assert/strict'
 
 const base = process.env.OFFICE_URL ?? 'http://localhost:8081'
@@ -49,17 +49,18 @@ try {
   await a.next(m => m.type === 'join' && m.player.id === b.id)
   a.ws.send(JSON.stringify({ type: 'move', x: 0.2, z: 6, rotation: 0, animation: 'walk' }))
   await b.next(m => m.type === 'snapshot' && m.players.some(p => p.id === a.id && p.x === 0.2))
-  a.ws.send(JSON.stringify({ type: 'chat', text: 'Hello, Bia!', name: 'spoof' }))
-  const chat = await b.next(m => m.type === 'chat')
-  assert.equal(chat.name, 'Ana')
-  assert.equal(chat.text, 'Hello, Bia!')
-  assert.equal(chat.id, a.id)
+  const url = 'https://media.tenor.com/example/reaction.gif'
+  a.ws.send(JSON.stringify({ type: 'gif', url, id: b.id, name: 'spoof' }))
+  for (const peer of [a, b]) {
+    const gif = await peer.next(m => m.type === 'gif')
+    assert.deepEqual(gif, { type: 'gif', id: a.id, url })
+  }
   a.ws.close()
   await b.next(m => m.type === 'leave' && m.id === a.id)
   const reconnect = await client('Ana')
   assert.notEqual(reconnect.id, a.id)
   assert.equal(reconnect.welcome.players.length, 2)
-  console.log('PASS: health, join, movement, chat identity, leave, reconnect')
+  console.log('PASS: health, join, movement, GIF identity, leave, reconnect')
 } finally {
   sockets.forEach(ws => ws.close())
 }

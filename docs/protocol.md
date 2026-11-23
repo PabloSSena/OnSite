@@ -10,7 +10,6 @@ Client → server:
   appearance and legacy `color` (the top color), then broadcast an immediate snapshot.
   Invalid updates are ignored without partially changing the outfit.
 - `move`: `x`, `z`, `rotation` (radians around Y), `animation` (`idle`, `walk`, or `sit`; anything else is stored as `idle`), at 20 Hz. Optional `y` (height above the floor, 0–3.5), `punch` (RIGHT arm remaining animation seconds, 0–0.32), `punchLeft` (LEFT arm remaining animation seconds, 0–0.32), and `speaking` (normalized microphone amplitude, 0–1) default to zero when omitted. The legacy `punch` name retains its right-arm meaning. Nonfinite/out-of-range speech values reject the move; accepted speech levels are forced to zero unless voice consent is enabled.
-- `chat`: `text`, up to 300 characters. At most one accepted message every 400 ms.
 - `voice`: `enabled` (boolean). Explicit opt-in; published through the next snapshot.
 - `signal`: `to` (current player ID), `kind` (`offer`, `answer`, or `ice`), `data` (described below). Only relayed when both players have voice enabled and the target is a different player currently in the room.
 - `gif`: `url`, at most 1500 bytes. At most one accepted reaction every 2 seconds.
@@ -34,7 +33,6 @@ Server → client:
 - `join`: `player` (also sent to the joining player).
 - `snapshot`: `players` (full state, 20 Hz), `world`.
 - `leave`: `id`.
-- `chat`: `id`, `name`, `text`, `at` (RFC3339 UTC). Broadcast to everyone, including the sender.
 - `gif`: `id` (connection identity), `url`. Broadcast to everyone, including the sender.
   Clients show a camera-facing image above that player's head for 8 seconds after receipt;
   a new reaction replaces the previous one. Leaving/disconnecting clears reactions.
@@ -114,13 +112,16 @@ spot. Like furniture collision, this is not authoritative.
 client: while seated, E stands up; standing within fridge reach, E uses the fridge (the
 seat prompt is hidden there); otherwise E sits, and a desk chair opens its desk. R sips
 and G drops a held beer anywhere.
-Chat uses connection identity and renders text through React, never HTML.
+Text chat is not supported. Legacy `chat` messages from joined clients are ignored
+without a reply or broadcast. Desk notes remain supported separately.
 GIFs load directly from external hosts in a bounded `<img>` with no referrer.
 The server does not download, proxy, or verify image contents; failed loads show a fallback.
 Media hosts see viewers' IP addresses. Links can expire, particularly Discord attachments.
 The outgoing queue is bounded: slow clients are disconnected without blocking the hub.
 Ping every 20s, 5s timeout. Reconnection creates a new identity and resets to spawn.
-No persisted history; the latest 100 messages live only in the tab.
+The dedicated GIF picker accepts pasted supported direct links and keeps recent
+links in localStorage, bounded to 24 entries. This local history is not sent to
+the server or replayed to other players; only a selected reaction is broadcast.
 A full room or invalid handshake closes the connection; the UI retries until the user leaves.
 
 ## Desks
@@ -151,7 +152,7 @@ Client → server (all take `desk`, an integer 0–9; invalid input is silently 
 - `desk-release`: owner only. Clears the style and all notes.
 - `desk-update`: owner only, `style` is a complete desk style. At most 5 per second;
   unchanged styles are not rebroadcast. Distance is not checked.
-- `desk-note`: `text` up to 80 characters (cleaned like chat). Any player with a token
+- `desk-note`: `text` up to 80 characters (trimmed, control characters removed, then truncated). Any player with a token
   within 2.6 units of an owned desk. At most one note every 5 seconds per connection;
   each desk keeps its 6 newest notes.
 - `desk-note-remove`: `note` (note ID). The desk owner or the note's author.
@@ -212,9 +213,9 @@ normal voice functional but mouth activity zero until it can resume.
 
 Offer/answer `data` is `{type: "offer" | "answer", sdp: string}`, with `type` matching `kind` and SDP at most 16,000 UTF-8 bytes. ICE `data` is either `null` (end of candidates) or `{candidate: string, sdpMid?: string | null, sdpMLineIndex?: number | null, usernameFragment?: string | null}`. Candidate strings are at most 4,096 UTF-8 bytes; optional strings are at most 256 UTF-8 bytes; the optional media-line index is an integer from 0 to 65,535. Unknown data fields, malformed shapes, unknown kinds, and invalid routes are silently ignored.
 
-The server allows at most 80 signaling attempts per sending connection per one-second window, including rejected attempts. WebSocket messages are capped at 32,768 bytes to accommodate SDP; existing movement and chat validation still applies. Signals use the same bounded outgoing queues and single writer as other messages. Neither signals nor media are stored; media flows directly between consenting browsers, not through the room server. Reconnection creates a new ID with voice disabled.
+The server allows at most 80 signaling attempts per sending connection per one-second window, including rejected attempts. WebSocket messages are capped at 32,768 bytes to accommodate SDP; existing movement and GIF validation still applies. Signals use the same bounded outgoing queues and single writer as other messages. Neither signals nor media are stored; media flows directly between consenting browsers, not through the room server. Reconnection creates a new ID with voice disabled.
 
-Client `subscribeSignals(listener)` delivers transient `VoiceSignal` events and returns an unsubscribe function; signals are not added to the network store or chat history. Send consent with `send({type: 'voice', enabled: true})` and signaling with `send({type: 'signal', to, kind, data})`. WebRTC microphone capture requires a secure browser context (HTTPS or localhost).
+Client `subscribeSignals(listener)` delivers transient `VoiceSignal` events and returns an unsubscribe function; signals are not added to the network store or persisted. Send consent with `send({type: 'voice', enabled: true})` and signaling with `send({type: 'signal', to, kind, data})`. WebRTC microphone capture requires a secure browser context (HTTPS or localhost).
 
 ## Opt-in webcams
 

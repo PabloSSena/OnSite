@@ -3,7 +3,7 @@
 Our 3D office: React Three Fiber + Go + WebSocket. One room for up to 10 friends,
 articulated low-poly avatars, WASD/arrow-key movement, third-person and first-person cameras, AABB collision,
 floating name tags, jumping onto furniture, animated punches, a wall mirror,
-text chat, GIF reactions, opt-in voice, and optional webcams. No accounts or database.
+GIF reactions, opt-in voice, and optional webcams. No text chat, accounts, or database.
 
 The world is a cozy four-room office house with a connected central hall and
 garden courtyard. See [`docs/world.md`](docs/world.md) for the layout and routes.
@@ -17,7 +17,7 @@ docker compose up --build -d
 ```
 
 Open **http://localhost:8081** in two tabs, join with different names, and move around.
-Click outside the chat to use WASD again. `Leave` closes the connection.
+Close open panels to use WASD again. `Leave` closes the connection.
 
 ### Menu and customization
 
@@ -38,7 +38,7 @@ The office starts in **first-person view**. After joining, toggle
 Click the 3D scene to capture the mouse, then move the mouse to look around.
 WASD/arrow keys move relative to where you are looking, with the same speed and
 collision as third-person mode. Press **Escape** to release the mouse and use
-chat or switch views. Movement pauses while the mouse is released in first-person.
+the GIF picker or switch views. Movement pauses while the mouse is released in first-person.
 Your upper body and name tag are hidden from the direct first-person
 view; look down to see your legs and boots. Friends and the mirror still
 see your full avatar.
@@ -53,7 +53,7 @@ Mouse capture requires a supported desktop browser on localhost or HTTPS.
 - Jumping and punching are visible to friends and in the mirror at the north end
   of the central hallway (walk straight ahead from spawn). It reflects your viewing
   angle, including your own full body in first-person.
-- Escape releases first-person controls for chat. Typing does not trigger actions.
+- Escape releases first-person controls for panels. Typing does not trigger actions.
 - Jump toward tables, the bench, planters, or monitors to land on their tops.
   Jump again from a surface or walk off to fall. Solid sides/undersides still
   block you, and you cannot jump through the room boundary.
@@ -66,7 +66,7 @@ Mouse capture requires a supported desktop browser on localhost or HTTPS.
 - Press **E** again, move, or jump to stand back up where you were.
 - Seats aren't reserved, so two people can end up in the same spot.
 - The mirror adds one scene render when visible; its fixed 1024×512 reflection
-  target limits GPU cost. DOM name tags/chat are not part of the reflected scene.
+  target limits GPU cost. DOM name tags and panels are not part of the reflected scene.
 
 ### Characters and animation
 
@@ -146,11 +146,13 @@ before running smoke/browser checks against that instance.
 
 ### GIF reactions
 
-Paste a direct HTTPS `.gif` link into **GIF link** and press **GIF** to show an
+Open the dedicated **GIF** picker and paste a supported direct HTTPS `.gif` link to show an
 animated reaction above your avatar for 8 seconds, visible to everyone currently
 connected. Supported media hosts: Tenor, GIPHY, and Discord (see the
 [protocol](docs/protocol.md) for the exact allowlist). Use **Copy image address**,
 not a GIF share-page URL. No API key is needed.
+The picker keeps recent links in localStorage on this browser, bounded to 24
+entries, so you can reuse them. This is local link history, not shared chat history.
 Reactions are limited to one every 2 seconds and replace your previous GIF.
 Images load from the external host, which receives viewers' IP addresses.
 Expired/broken links show “GIF unavailable”; no uploads or link scraping are provided.
@@ -177,7 +179,7 @@ microphone audio is a separate **Join voice** opt-in.
 Reconnecting does not automatically restart your camera.
 
 Camera access requires **HTTPS or localhost**. Plain HTTP on a LAN IP still
-supports movement/chat but browsers will not allow webcam capture.
+supports movement and GIF reactions but browsers will not allow webcam capture.
 Video uses direct WebRTC connections with low-resolution, 15 fps capture.
 Each sender uploads once per viewer, so test bandwidth before using all 10 cameras.
 No media is recorded or forwarded by the Go server. Participants learn each
@@ -225,7 +227,8 @@ npm run smoke
 
 The smoke test requires Compose running on `:8081`, with no other users in the room.
 It uses Node's native WebSocket and tests two real clients through nginx:
-movement, chat, leaving, and a new connection. It does not test WebGL or the camera.
+movement, GIF payload/connection identity (including delivery to the sender), leaving,
+and a new connection. It does not fetch GIF images or test WebGL or the camera.
 
 Browser test (Chromium, two real tabs; Compose must be running):
 ```sh
@@ -233,7 +236,9 @@ cd client
 npx playwright install chromium
 npm run test:e2e
 ```
-Checks joining, visible remote movement, chat, and leaving without JavaScript errors.
+The existing browser suite includes joining, visible remote movement, and leaving
+without JavaScript errors. Its legacy text-chat assertions need updating for the
+GIF-only interface; the suite is not evidence that text chat is supported.
 Webcam tests use Chromium's fake camera and check video reaching a late viewer,
 two-way sharing, toggling, track cleanup on leave/disconnect, camera-off
 reconnection, and a simulated permission denial. Physical cameras and TURN across
@@ -259,13 +264,14 @@ docker run --rm -v "${PWD}/server:/src" -w /src golang:1.26 go vet ./...
 Manual checklist:
 - Two tabs, two names; movement appears in the other tab.
 - Diagonal movement is not faster. Desks/walls block movement; corners allow sliding.
-- The camera moves closer near walls; typing in chat does not move the avatar.
+- The camera moves closer near walls; typing in panels does not move the avatar.
 - Toggle first-person, click the scene, look up/down and turn; movement follows
-  the horizontal view direction. Escape releases the mouse for chat; switching
+  the horizontal view direction. Escape releases the mouse for panels; switching
   back restores the third-person avatar and controls.
-- Chat appears in both tabs; closing one removes its avatar.
+- Send a GIF from the picker; it appears above the sender in both tabs. Reuse a
+  recent link after reload; closing a tab removes its avatar.
 - Space jumps and lands once per press; left/right click punches the matching arm
-  in first-person. Friends see both actions; chat input triggers neither.
+  in first-person. Friends see both actions; panel inputs trigger neither.
 - Jump onto a table, jump again onto its monitor, then walk off and land on the floor.
 - Two devices with headphones: explicitly join voice, verify both directions,
   mute/unmute, leave voice, deny permission, and reconnect without automatic capture.
@@ -293,7 +299,9 @@ Manual checklist:
   with movement; see `docs/protocol.md` for their bounds and defaults.
 - **Zustand only for network/UI state.** Per-frame transforms use refs.
 - **Same-origin proxy.** The same code works with Vite and nginx, without CORS.
-- **No persistence.** Restarting clears the room/chat. Reconnecting assigns a new ID.
+- **Transient room state.** Restarting clears players and GIF reactions.
+  Reconnecting assigns a new ID. Recent GIF links stay in this browser's localStorage;
+  desk persistence is separate and controlled by `DESKS_FILE`.
 - **Small-room WebRTC mesh.** One audio connection per other opted-in friend.
   This is simple for 5–10 users but scales poorly compared with an SFU. No voice
   recording, positional attenuation, or managed TURN service.

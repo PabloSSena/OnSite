@@ -30,7 +30,6 @@ export function onVideoSignal(listener: (signal: VideoSignal) => void) {
   videoSignalListeners.add(listener)
   return () => { videoSignalListeners.delete(listener) }
 }
-export type Chat = { id: string; name: string; text: string; at: string }
 export type VoiceSignal =
   | { type: 'signal'; from: string; kind: 'offer' | 'answer'; data: RTCSessionDescriptionInit }
   | { type: 'signal'; from: string; kind: 'ice'; data: RTCIceCandidateInit | null }
@@ -48,7 +47,6 @@ type ServerMessage =
   | { type: 'join'; player: Player }
   | { type: 'leave'; id: string }
   | { type: 'correction'; player: Player }
-  | ({ type: 'chat' } & Chat)
   | { type: 'gif'; id: string; url: string }
   | { type: 'desks'; desks: unknown; mine: number | null }
 
@@ -56,14 +54,13 @@ type State = {
   id: string | null
   status: 'offline' | 'connecting' | 'online' | 'reconnecting'
   players: Record<string, Player>
-  chats: Chat[]
   gifs: Record<string, GIFReaction>
   desks: Desk[]
   myDesk: number | null
   fridgeOpen: boolean
 }
 export const useNetwork = create<State>(() => ({
-  id: null, status: 'offline', players: {}, chats: [], gifs: {}, desks: [], myDesk: null, fridgeOpen: false,
+  id: null, status: 'offline', players: {}, gifs: {}, desks: [], myDesk: null, fridgeOpen: false,
 }))
 
 // Mutable local simulation: no React re-render on every animation frame.
@@ -146,9 +143,6 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
         case 'correction':
           Object.assign(localPlayer, fromServer(msg.player))
           break
-        case 'chat':
-          useNetwork.setState(s => ({ chats: [...s.chats.slice(-99), msg] }))
-          break
         case 'desks': {
           const desks = parseDesks(msg.desks)
           const mine = typeof msg.mine === 'number' ? msg.mine : null
@@ -173,7 +167,6 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
       retry = setTimeout(open, Math.min(1000 * 2 ** attempt++, 10000))
     }
   }
-  useNetwork.setState({ chats: [] })
   open()
   return () => {
     stopped = true

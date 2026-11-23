@@ -100,7 +100,7 @@ func parseDeskStyle(raw json.RawMessage) (deskStyle, bool) {
 			return s, false
 		}
 	}
-	// Reject absurd input; otherwise normalize like names and chat.
+	// Reject absurd input; otherwise normalize like player names.
 	if len(s.Plate) > 4*deskPlateMax || len(s.Mood) > 4*deskMoodMax {
 		return s, false
 	}

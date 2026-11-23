@@ -224,7 +224,7 @@ func TestGardenMovementBoundary(t *testing.T) {
 	}
 }
 
-func TestChatIdentityAndLimit(t *testing.T) {
+func TestLegacyChatIgnored(t *testing.T) {
 	h := newHub()
 	p := &peer{
 		joined: true, send: make(chan []byte, 8),
@@ -237,23 +237,18 @@ func TestChatIdentityAndLimit(t *testing.T) {
 	}
 	h.peers[viewer] = true
 	now := time.Now()
+	before := p.player
 	h.handle(command{peer: p, input: input{Type: "chat", Name: "spoof", Text: "hi"}}, now)
-	got := string(<-p.send)
-	if got != `{"at":"`+now.UTC().Format(time.RFC3339)+`","id":"actual-id","name":"Ana","text":"hi","type":"chat"}` {
-		t.Fatalf("unexpected chat: %s", got)
-	}
-	select {
-	case data := <-viewer.send:
-		if string(data) != got {
-			t.Fatalf("room viewer received different chat: %s", data)
-		}
-	default:
-		t.Fatal("chat must broadcast to other room members")
-	}
-	h.handle(command{peer: p, input: input{Type: "chat", Text: "spam"}}, now)
+	h.handle(command{peer: p, input: input{Type: "chat", Text: "still unsupported"}}, now.Add(time.Second))
 	if len(p.send) != 0 || len(viewer.send) != 0 {
-		t.Fatal("chat rate limit not applied")
+		t.Fatal("unsupported legacy chat must not reply or broadcast")
 	}
+	if p.player != before || !h.peers[p] || !h.peers[viewer] {
+		t.Fatal("unsupported legacy chat must not change players or room membership")
+	}
+}
+
+func TestCleanUnicode(t *testing.T) {
 	if clean("  Hey👋\n  ", 4) != "Hey👋" {
 		t.Fatal("unicode trimming failed")
 	}

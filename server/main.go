@@ -159,7 +159,6 @@ type peer struct {
 	once              sync.Once
 	player            player
 	lastMove          time.Time
-	lastChat          time.Time
 	lastGIF           time.Time
 	lastInput         time.Time
 	joined            bool
@@ -519,16 +518,6 @@ func (h *hub) handle(c command, now time.Time) {
 			p.lastInteract = now
 			h.broadcast(h.snapshot())
 		}
-	case "chat":
-		text := clean(m.Text, 300)
-		if text == "" || now.Sub(p.lastChat) < 400*time.Millisecond {
-			return
-		}
-		p.lastChat = now
-		h.broadcast(map[string]any{
-			"type": "chat", "id": p.player.ID, "name": p.player.Name,
-			"text": text, "at": now.UTC().Format(time.RFC3339),
-		})
 	}
 }
 
