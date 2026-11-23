@@ -4,7 +4,7 @@ import { DeskEditor, DeskFree, DeskVisit } from './DeskEditor'
 import Webcams, { WebcamSelfPreview } from './Webcams'
 import { connect, send, useNetwork } from './network'
 import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
-import { validGIFURL } from './gif'
+import GIFPicker from './GIFPicker'
 import { useInteraction } from './interaction'
 import AppearanceEditor from './AppearanceEditor'
 import { loadAppearance, saveAppearance, type Appearance } from './appearance'
@@ -24,22 +24,17 @@ const labels = { offline: 'Offline', connecting: 'Connecting…', online: 'Live'
 export default function App() {
   const [name, setName] = useState(() => sessionStorage.getItem('office-name') ?? '')
   const [joined, setJoined] = useState(false)
-  const [text, setText] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('first-person')
   const [menuOpen, setMenuOpen] = useState(false)
   const [appearance, setAppearance] = useState(loadAppearance)
   const [editingAppearance, setEditingAppearance] = useState(false)
   const appearanceRef = useRef(appearance)
   const customization = useRef<HTMLDialogElement>(null)
-  const [gifURL, setGifURL] = useState('')
-  const [gifError, setGifError] = useState('')
-  const [gifCooldown, setGifCooldown] = useState(false)
-  const { status, players, chats } = useNetwork()
+  const { status, players } = useNetwork()
   const voice = useVoice()
   const seatHint = useSeatHint(s => s.hint)
   const hintDesk = useSeatHint(s => s.desk)
   const seatedDesk = useSeatedDesk(s => s.desk)
-  const log = useRef<HTMLDivElement>(null)
   const desks = useNetwork(s => s.desks)
   const myDesk = useNetwork(s => s.myDesk)
   // Sitting in a desk chair opens that desk's panel; Done/Esc closes it while you stay seated.
@@ -74,16 +69,8 @@ export default function App() {
         : hinted.id === myDesk ? 'Press E to sit at your desk' : `Press E to sit at ${hinted.ownerName}'s desk`
 
   useEffect(() => {
-    if (!gifCooldown) return
-    const timer = setTimeout(() => setGifCooldown(false), 2000)
-    return () => clearTimeout(timer)
-  }, [gifCooldown])
-  useEffect(() => {
     if (joined) return connect(name, () => appearanceRef.current)
   }, [joined, name])
-  useEffect(() => {
-    log.current?.scrollTo({ top: log.current.scrollHeight, behavior: 'smooth' })
-  }, [chats])
 
   function changeAppearance(next: Appearance) {
     appearanceRef.current = next
@@ -102,25 +89,6 @@ export default function App() {
     setJoined(true)
   }
 
-  function chat(e: FormEvent) {
-    e.preventDefault()
-    if (!text.trim() || status !== 'online') return
-    send({ type: 'chat', text: text.trim() })
-    setText('')
-  }
-  function shareGIF(e: FormEvent) {
-    e.preventDefault()
-    if (status !== 'online' || gifCooldown) return
-    const url = gifURL.trim()
-    if (!validGIFURL(url)) {
-      setGifError('Use a direct HTTPS .gif link from Tenor, GIPHY, or Discord—not a share page.')
-      return
-    }
-    send({ type: 'gif', url })
-    setGifCooldown(true)
-    setGifURL('')
-    setGifError('')
-  }
   return (
     <main>
       {joined && <Office viewMode={viewMode} focusDesk={deskPanel} />}
@@ -184,7 +152,7 @@ export default function App() {
       </>}
       {joined && <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span>·</span>
         <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate <span>·</span> <kbd>E</kbd> Use / sit<br />
-        {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse / chat' : 'Click the scene to play · Click the chat to talk'}</div>}
+        {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse · GIFs to react' : 'Click the scene to play · GIFs to react'}</div>}
       {/* Seat and fridge prompts share one column so they never overlap. */}
       {joined && <div className="hud-prompts">
         {seatPrompt && deskPanel === null && <div className="seat-hint" role="status">{seatPrompt}</div>}
@@ -205,27 +173,7 @@ export default function App() {
           <AppearanceEditor value={appearance} onChange={changeAppearance} />
           </div>
         </div>
-      ) : (
-        <section className="chat panel" aria-label="Room chat">
-          <div className="chat-title"># office <span>ROOM CHAT</span></div>
-          <div className="messages" ref={log} role="log" aria-live="polite">
-            {chats.length === 0 && <p className="empty">Virtual coffee. Real conversations.<br />Say hello 👋</p>}
-            {chats.map((m, i) => <div className="message" key={i}><b>{m.name}</b><time>{new Date(m.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</time><p>{m.text}</p></div>)}
-          </div>
-          <form onSubmit={chat}>
-            <input aria-label="Message" maxLength={300} value={text} onChange={e => setText(e.target.value)} placeholder="Say hello… (Enter to send)" disabled={status !== 'online'} />
-            <button type="submit" disabled={status !== 'online' || !text.trim()} aria-label="Send message">↑</button>
-          </form>
-          <form onSubmit={shareGIF} aria-label="GIF reaction">
-            <input aria-label="GIF link" aria-describedby="gif-help" maxLength={1500}
-              value={gifURL} onChange={e => { setGifURL(e.target.value); setGifError('') }}
-              placeholder="Paste a direct .gif link…" disabled={status !== 'online'} />
-            <button type="submit" disabled={status !== 'online' || gifCooldown || !gifURL.trim()}>GIF</button>
-          </form>
-          <p id="gif-help" className="gif-help">Shows above your head for 8 seconds. External images load for everyone.</p>
-          {gifError && <p className="gif-error" role="alert">{gifError}</p>}
-        </section>
-      )}
+      ) : <GIFPicker />}
     </main>
   )
 }
