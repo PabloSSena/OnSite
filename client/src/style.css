@@ -24,6 +24,10 @@ button:focus-visible { outline: 2px solid #65dfbb; outline-offset: 3px; }
 .help span { margin: 0 10px; }
 .seat-hint { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); background: #111b27e8; padding: 8px 14px; border-radius: 999px; font-size: 13px; color: #e6eef3; pointer-events: none; }
 kbd { display: inline-block; background: #ffffff12; padding: 4px 6px; border-radius: 4px; margin-right: 3px; }
+/* Context hint near the crosshair area; never captures clicks meant for the scene. */
+.interaction-prompt { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; gap: 14px;
+  background: #111b27e8; padding: 10px 14px; border-radius: 10px; font-size: 13px; color: #e6eef2; pointer-events: none; white-space: nowrap; }
+.interaction-prompt kbd { color: #65dfbb; }
 .overlay { position: absolute; inset: 0; display: grid; place-items: center; background: #0d182852; backdrop-filter: blur(4px); }
 .panel { background: #111b27f5; border: 1px solid #ffffff1c; border-radius: 18px; box-shadow: 0 20px 60px #07111e40; }
 .join { width: min(420px, 90vw); padding: 36px; }
@@ -63,3 +67,5 @@ h1 { font-size: 40px; line-height: 1.08; letter-spacing: -1.5px; margin: 18px 0;
   .chat { right: 12px; bottom: 12px; width: min(310px, calc(100vw - 24px)); }
   .messages { height: 130px; }
 }
+.hud-prompts { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.hud-prompts > .seat-hint, .hud-prompts > .interaction-prompt { position: static; transform: none; }

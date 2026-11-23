@@ -3,8 +3,9 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { create } from 'zustand'
 import { localPlayer, send, useNetwork } from './network'
-import { deskOfSeat, desks, nearestSeat, stepPhysics, type Seat } from './world'
+import { deskOfSeat, desks, nearestSeat, nearFridge, SIP_DURATION, stepPhysics, type Seat } from './world'
 import { SEATED_HIP_LIFT, STANDING_HIP } from './avatarMotion'
+import { fridgeAction, fridgePrompt, setInteractionHint } from './interaction'
 import WallMirror from './Mirror'
 import Avatar, { FirstPersonFists } from './Avatar'
 import { OfficeWorld } from './OfficeWorld'
@@ -19,6 +20,11 @@ export const useSeatHint = create<{ hint: 'sit' | 'stand' | null; desk: number |
 // The desk whose chair the local player is seated in. Sitting is how a desk is used.
 export const useSeatedDesk = create<{ desk: number | null }>(() => ({ desk: null }))
 
+const initialActions = () => ({
+  jump: false, left: false, right: false, interact: false, sip: false, drop: false,
+  nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0,
+})
+
 // Entering and leaving glide at walking speed, under the server's 6 units/s limit.
 const SEAT_GLIDE_SPEED = 4
 type Seating = { phase: 'none' | 'entering' | 'seated' | 'leaving'; seat: Seat | null; entry: { x: number; z: number } }
@@ -30,7 +36,7 @@ function Controller({ obstacles, viewMode, focusDesk }: {
   const keys = useRef(new Set<string>())
   const elapsed = useRef(0)
   const look = useRef({ yaw: 0, pitch: 0 })
-  const actions = useRef({ jump: false, left: false, right: false, seat: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 })
+  const actions = useRef(initialActions())
   const seating = useRef(standing())
   const eyeOffset = useRef(0)
   const id = useNetwork(s => s.id)
@@ -40,7 +46,7 @@ function Controller({ obstacles, viewMode, focusDesk }: {
     ray: new THREE.Raycaster(), offset: new THREE.Vector3(0, 8, 10),
   })
   useEffect(() => {
-    actions.current = { jump: false, left: false, right: false, seat: false, nextLeft: true, velocity: 0, leftCooldown: 0, rightCooldown: 0 }
+    actions.current = initialActions()
     seating.current = standing()
   }, [id])
   // First person stays first person while a desk panel is open: the view turns
@@ -100,7 +106,8 @@ function Controller({ obstacles, viewMode, focusDesk }: {
   }, [viewMode, gl])
   useEffect(() => {
     keys.current.clear()
-    actions.current.jump = actions.current.left = actions.current.right = actions.current.seat = false
+    actions.current.jump = actions.current.left = actions.current.right =
+      actions.current.interact = actions.current.sip = actions.current.drop = false
     if (viewMode !== 'first-person') return
     const canvas = gl.domElement
     look.current = { yaw: localPlayer.rotation, pitch: 0 }
@@ -118,7 +125,8 @@ function Controller({ obstacles, viewMode, focusDesk }: {
     }
     const clear = () => {
       keys.current.clear()
-      actions.current.jump = actions.current.left = actions.current.right = actions.current.seat = false
+      actions.current.jump = actions.current.left = actions.current.right =
+      actions.current.interact = actions.current.sip = actions.current.drop = false
     }
     const escape = (e: KeyboardEvent) => {
       if (e.code === 'Escape' && document.pointerLockElement === canvas) {
@@ -141,10 +149,6 @@ function Controller({ obstacles, viewMode, focusDesk }: {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (document.querySelector('dialog[open]') || (e.target as HTMLElement).closest('input, textarea, select, button, [contenteditable="true"]')) return
-      if (e.code === 'KeyE') {
-        e.preventDefault()
-        if (!e.repeat) actions.current.seat = true
-      }
       if (e.code === 'Space' || e.code === 'KeyF') {
         e.preventDefault()
         if (!e.repeat) {
@@ -157,6 +161,14 @@ function Controller({ obstacles, viewMode, focusDesk }: {
           }
         }
       }
+      if (e.code === 'KeyE' || e.code === 'KeyR' || e.code === 'KeyG') {
+        e.preventDefault()
+        if (!e.repeat) {
+          if (e.code === 'KeyE') actions.current.interact = true
+          else if (e.code === 'KeyR') actions.current.sip = true
+          else actions.current.drop = true
+        }
+      }
       if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault()
         keys.current.add(e.code)
@@ -165,7 +177,8 @@ function Controller({ obstacles, viewMode, focusDesk }: {
     const up = (e: KeyboardEvent) => keys.current.delete(e.code)
     const clear = () => {
       keys.current.clear()
-      actions.current.jump = actions.current.left = actions.current.right = actions.current.seat = false
+      actions.current.jump = actions.current.left = actions.current.right =
+      actions.current.interact = actions.current.sip = actions.current.drop = false
     }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
@@ -209,13 +222,25 @@ function Controller({ obstacles, viewMode, focusDesk }: {
       localPlayer.punchLeft = 0.32
       action.leftCooldown = 0.45
     }
-    if (active && action.right && action.rightCooldown === 0) {
+    const holding = localPlayer.holding === 'beer'
+    // The right hand holds the bottle, so it cannot punch.
+    if (active && !holding && action.right && action.rightCooldown === 0) {
       localPlayer.punch = 0.32
       action.rightCooldown = 0.45
     }
-    const toggleSeat = active && action.seat
-    action.jump = action.left = action.right = action.seat = false
+    localPlayer.drink = holding ? Math.max(0, localPlayer.drink - dt) : 0
+    if (active && holding && action.sip && localPlayer.drink === 0) localPlayer.drink = SIP_DURATION
+    if (active && holding && action.drop) send({ type: 'interact', action: 'drop' })
+    // One E for everything, nearest thing first: seated, E stands up; standing within
+    // reach of the fridge, it uses the fridge; otherwise it sits (desk chairs open desks).
     const sitting = seating.current
+    const reach = online && sitting.phase === 'none' && nearFridge(localPlayer.x, localPlayer.z)
+    const fridgeOpen = useNetwork.getState().fridgeOpen
+    const press = active && action.interact
+    if (press && reach) send({ type: 'interact', action: fridgeAction(fridgeOpen, localPlayer.holding) })
+    const toggleSeat = press && !reach
+    setInteractionHint({ prompt: reach ? fridgePrompt(fridgeOpen, localPlayer.holding) : null, holding: online && holding })
+    action.jump = action.left = action.right = action.interact = action.sip = action.drop = false
     if (!online) seating.current = standing()
     else if (sitting.phase === 'none' && toggleSeat && localPlayer.y <= 0.01) {
       const seat = nearestSeat(localPlayer.x, localPlayer.z)
@@ -270,7 +295,7 @@ function Controller({ obstacles, viewMode, focusDesk }: {
     localPlayer.animation = !online ? 'idle'
       : phase === 'seated' ? 'sit'
         : phase !== 'none' || moving ? 'walk' : 'idle'
-    const nearSeat = online && phase === 'none' && localPlayer.y <= 0.01 ? nearestSeat(localPlayer.x, localPlayer.z) : null
+    const nearSeat = online && phase === 'none' && localPlayer.y <= 0.01 && !nearFridge(localPlayer.x, localPlayer.z) ? nearestSeat(localPlayer.x, localPlayer.z) : null
     const hint = !online ? null : phase === 'seated' ? 'stand' : nearSeat ? 'sit' : null
     const hintDesk = phase === 'seated' ? deskOfSeat(seating.current.seat) : deskOfSeat(nearSeat)
     const current = useSeatHint.getState()

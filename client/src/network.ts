@@ -19,7 +19,11 @@ export type Player = {
   speaking: number
   camera: boolean
   appearance: Appearance
+  holding: Holding
+  drink: number
 }
+export type Holding = 'none' | 'beer'
+export type World = { fridgeOpen: boolean }
 export type VideoSignal = { type: 'camera-signal'; from: string; session: string; kind: 'offer' | 'answer'; sdp: string }
 const videoSignalListeners = new Set<(signal: VideoSignal) => void>()
 export function onVideoSignal(listener: (signal: VideoSignal) => void) {
@@ -39,8 +43,8 @@ export type GIFReaction = { url: string; receivedAt: number }
 type ServerMessage =
   | VoiceSignal
   | VideoSignal
-  | { type: 'welcome'; id: string; players: Player[] }
-  | { type: 'snapshot'; players: Player[] }
+  | { type: 'welcome'; id: string; players: Player[]; world?: World }
+  | { type: 'snapshot'; players: Player[]; world?: World }
   | { type: 'join'; player: Player }
   | { type: 'leave'; id: string }
   | { type: 'correction'; player: Player }
@@ -56,13 +60,19 @@ type State = {
   gifs: Record<string, GIFReaction>
   desks: Desk[]
   myDesk: number | null
+  fridgeOpen: boolean
 }
 export const useNetwork = create<State>(() => ({
-  id: null, status: 'offline', players: {}, chats: [], gifs: {}, desks: [], myDesk: null,
+  id: null, status: 'offline', players: {}, chats: [], gifs: {}, desks: [], myDesk: null, fridgeOpen: false,
 }))
 
 // Mutable local simulation: no React re-render on every animation frame.
-export const localPlayer = { x: 0, y: 0, z: 6, punch: 0, punchLeft: 0, speaking: 0, rotation: 0, animation: 'idle' as Animation }
+// `holding` mirrors the server's accepted value; only `drink` is simulated locally.
+export const localPlayer = {
+  x: 0, y: 0, z: 6, punch: 0, punchLeft: 0, speaking: 0, rotation: 0, drink: 0,
+  animation: 'idle' as Animation, holding: 'none' as Holding,
+}
+const fromServer = (p: Player) => ({ ...p, punchLeft: p.punchLeft ?? 0, holding: p.holding === 'beer' ? 'beer' as const : 'none' as const, drink: p.drink ?? 0 })
 let socket: WebSocket | null = null
 
 export function send(message: object) {
@@ -99,17 +109,28 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
         case 'welcome': {
           attempt = 0
           const me = msg.players.find(p => p.id === msg.id)
-          if (me) Object.assign(localPlayer, me, { punchLeft: me.punchLeft ?? 0 })
+          if (me) Object.assign(localPlayer, fromServer(me))
           useNetwork.setState({
             id: msg.id, status: 'online',
             players: Object.fromEntries(msg.players.map(p => [p.id, p])),
-            gifs: {},
+            gifs: {}, fridgeOpen: msg.world?.fridgeOpen === true,
           })
           break
         }
-        case 'snapshot':
-          useNetwork.setState({ players: Object.fromEntries(msg.players.map(p => [p.id, p])) })
+        case 'snapshot': {
+          const { id } = useNetwork.getState()
+          const me = msg.players.find(p => p.id === id)
+          // Interactions are server-approved: adopt the accepted hands, keep local motion.
+          if (me) {
+            localPlayer.holding = me.holding === 'beer' ? 'beer' : 'none'
+            if (localPlayer.holding === 'none') localPlayer.drink = 0
+          }
+          useNetwork.setState({
+            players: Object.fromEntries(msg.players.map(p => [p.id, p])),
+            fridgeOpen: msg.world?.fridgeOpen === true,
+          })
           break
+        }
         case 'join':
           useNetwork.setState(s => ({ players: { ...s.players, [msg.player.id]: msg.player } }))
           break
@@ -123,7 +144,7 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
           })
           break
         case 'correction':
-          Object.assign(localPlayer, msg.player, { punchLeft: msg.player.punchLeft ?? 0 })
+          Object.assign(localPlayer, fromServer(msg.player))
           break
         case 'chat':
           useNetwork.setState(s => ({ chats: [...s.chats.slice(-99), msg] }))
@@ -146,7 +167,9 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
     ws.onerror = () => ws.close()
     ws.onclose = () => {
       if (stopped) return
-      useNetwork.setState({ id: null, players: {}, gifs: {}, desks: [], myDesk: null, status: 'reconnecting' })
+      localPlayer.holding = 'none'
+      localPlayer.drink = 0
+      useNetwork.setState({ id: null, players: {}, gifs: {}, desks: [], myDesk: null, fridgeOpen: false, status: 'reconnecting' })
       retry = setTimeout(open, Math.min(1000 * 2 ** attempt++, 10000))
     }
   }
@@ -160,6 +183,8 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
       current.close()
     }
     if (socket === current) socket = null
-    useNetwork.setState({ id: null, players: {}, gifs: {}, desks: [], myDesk: null, status: 'offline' })
+    localPlayer.holding = 'none'
+    localPlayer.drink = 0
+    useNetwork.setState({ id: null, players: {}, gifs: {}, desks: [], myDesk: null, fridgeOpen: false, status: 'offline' })
   }
 }

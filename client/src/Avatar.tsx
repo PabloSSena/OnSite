@@ -2,9 +2,10 @@ import { Html } from '@react-three/drei'
 import { useFrame, useThree } from '@react-three/fiber'
 import { useLayoutEffect, useRef } from 'react'
 import * as THREE from 'three'
-import { advanceMotion, createMotion, easeSit, footTarget, legPose, punchExtension, SEATED_HIP_LIFT, sitPose, STANDING_HIP } from './avatarMotion'
+import { advanceMotion, createMotion, easeSit, footTarget, legPose, punchExtension, SEATED_HIP_LIFT, sipLift, sitPose, STANDING_HIP } from './avatarMotion'
 import { localPlayer, useNetwork, type Player } from './network'
-import { seatAt, supported } from './world'
+import { seatAt, SIP_DURATION, supported } from './world'
+import { BeerBottle } from './Fridge'
 import GIFBubble from './GIFBubble'
 import { defaultAppearance } from './appearance'
 import { advanceMouth } from './speechMotion'
@@ -31,6 +32,7 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
   const ankles = useRef<(THREE.Group | null)[]>([])
   const shoulders = useRef<(THREE.Group | null)[]>([])
   const elbows = useRef<(THREE.Group | null)[]>([])
+  const bottle = useRef<THREE.Group>(null!)
   const target = useRef(new THREE.Quaternion())
   const euler = useRef(new THREE.Euler())
   const previous = useRef(new THREE.Vector3(player.x, player.y ?? 0, player.z))
@@ -82,7 +84,9 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
     const sit = sitBlend.current = easeSit(sitBlend.current, seat !== null, dt)
     const hipY = standingHip + (seatHip.current + breathing - standingHip) * sit
     hips.current.position.y = hipY
-    const punch = punchExtension(p.punch ?? 0)
+    const holding = !preview && p.holding === 'beer'
+    const sip = holding ? sipLift(p.drink ?? 0, SIP_DURATION) : 0
+    const punch = holding ? 0 : punchExtension(p.punch ?? 0)
     const punchLeft = punchExtension(p.punchLeft ?? 0)
     const twist = punch - punchLeft
     torso.current.rotation.set(-stride * 0.08 + state.air * 0.06 - Math.max(punch, punchLeft) * 0.05, -twist * 0.12,
@@ -100,9 +104,19 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
       ankles.current[i]!.rotation.x = leg.ankle
       const swing = Math.cos(state.phase + i * Math.PI) * stride * 0.5 + state.air * 0.4
       const hit = i === 1 ? punch : punchLeft
+      if (i === 1 && holding) {
+        // Carry the bottle in front, then fold the arm up to the mouth for a sip.
+        const shoulder = 0.35 + sip * 0.75 + swing * 0.2 * (1 - sip)
+        const elbow = 1 + sip * 0.95
+        shoulders.current[i]!.rotation.set(shoulder, 0, side * (0.1 - sip * 0.12))
+        elbows.current[i]!.rotation.x = elbow
+        bottle.current.rotation.x = -(shoulder + elbow) + sip * 1.6
+        continue
+      }
       shoulders.current[i]!.rotation.set(swing * (1 - hit) + hit * 1.55, 0, side * (0.1 + state.air * 0.2))
       elbows.current[i]!.rotation.x = -(0.25 + state.air * 0.35) * (1 - hit)
     }
+    bottle.current.visible = holding
   })
 
   return (
@@ -279,6 +293,10 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
                   <sphereGeometry args={[0.085, 8, 6]} />
                   <meshStandardMaterial color={skin} roughness={0.9} flatShading />
                 </mesh>
+                {/* Always mounted so layer assignment covers it; visibility follows `holding`. */}
+                {side === 1 && <group ref={bottle} position={[0, -0.26, -0.03]} visible={false}>
+                  <BeerBottle />
+                </group>}
               </group>
             </group>
           ))}
@@ -295,6 +313,7 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
 export function FirstPersonFists() {
   const root = useRef<THREE.Group>(null!)
   const hands = useRef<(THREE.Group | null)[]>([])
+  const bottle = useRef<THREE.Group>(null!)
   const previous = useRef(new THREE.Vector3(localPlayer.x, localPlayer.y, localPlayer.z))
   const motion = useRef(createMotion())
   const player = useNetwork(s => s.id ? s.players[s.id] : undefined)
@@ -312,20 +331,28 @@ export function FirstPersonFists() {
     const distance = Math.hypot(localPlayer.x - previous.current.x, localPlayer.z - previous.current.z)
     const state = advanceMotion(motion.current, distance, supported(localPlayer), localPlayer.animation === 'walk', delta)
     previous.current.set(localPlayer.x, localPlayer.y, localPlayer.z)
+    const holding = localPlayer.holding === 'beer'
+    const sip = holding ? sipLift(localPlayer.drink, SIP_DURATION) : 0
     for (let i = 0; i < 2; i++) {
       const side = i === 0 ? -1 : 1
-      const punch = punchExtension(i === 1 ? localPlayer.punch : localPlayer.punchLeft)
+      const punch = i === 1 && holding ? 0 : punchExtension(i === 1 ? localPlayer.punch : localPlayer.punchLeft)
       const sway = Math.sin(state.phase + i * Math.PI) * state.stride * 0.012 * (1 - state.air)
-      hands.current[i]!.position.set(side * (0.18 - punch * 0.08),
-        -0.18 + sway + punch * 0.06 - state.landing * 0.025 + Math.sin(clock.elapsedTime * 1.7) * 0.003,
-        -0.65 - punch * 0.3)
-      hands.current[i]!.rotation.x = punch * -0.2
+      const raise = i === 1 ? sip : 0
+      // A sip brings the bottle up toward the centre of the view and tips it back.
+      hands.current[i]!.position.set(side * (0.18 - punch * 0.08 - raise * 0.13),
+        -0.18 + sway + punch * 0.06 + raise * 0.1 - state.landing * 0.025 + Math.sin(clock.elapsedTime * 1.7) * 0.003,
+        -0.65 - punch * 0.3 + raise * 0.22)
+      hands.current[i]!.rotation.x = punch * -0.2 + raise * 1.1
     }
+    bottle.current.visible = holding
   })
   return (
     <group ref={root}>
       {([-1, 1] as const).map((side, i) => (
         <group key={side} ref={node => { hands.current[i] = node }}>
+          {side === 1 && <group ref={bottle} position={[0, 0.06, -0.01]} visible={false}>
+            <BeerBottle overlay />
+          </group>}
           <mesh rotation={[Math.PI / 2, 0, 0]} renderOrder={10}>
             <capsuleGeometry args={[0.075, 0.06, 3, 8]} />
             <meshStandardMaterial color={skin} roughness={0.9} flatShading depthTest={false} depthWrite={false} />

@@ -37,6 +37,8 @@ type player struct {
 	Speaking   float64    `json:"speaking"`
 	Camera     bool       `json:"camera"`
 	Appearance appearance `json:"appearance"`
+	Holding    string     `json:"holding"`
+	Drink      float64    `json:"drink"`
 }
 
 type input struct {
@@ -63,6 +65,20 @@ type input struct {
 	Desk       *int            `json:"desk"`
 	Style      json.RawMessage `json:"style"`
 	Note       string          `json:"note"`
+	Action     string          `json:"action"`
+	Drink      float64         `json:"drink"`
+}
+
+// Keep in sync with fridge and FRIDGE_REACH in client/src/world.ts.
+const (
+	fridgeX     = 14.6
+	fridgeZ     = -2.8
+	fridgeReach = 2.0
+	maxDrink    = 1.2
+)
+
+func nearFridge(p player) bool {
+	return math.Hypot(p.X-fridgeX, p.Z-fridgeZ) <= fridgeReach
 }
 
 type appearance struct {
@@ -155,6 +171,7 @@ type peer struct {
 	deskWindow        time.Time
 	deskCount         int
 	lastNote          time.Time
+	lastInteract      time.Time
 }
 
 func (p *peer) stop() {
@@ -171,10 +188,11 @@ type command struct {
 }
 
 type hub struct {
-	commands  chan command
-	peers     map[*peer]bool
-	desks     [len(deskPositions)]*desk
-	desksPath string
+	commands   chan command
+	peers      map[*peer]bool
+	desks      [len(deskPositions)]*desk
+	desksPath  string
+	fridgeOpen bool
 }
 
 func newHub() *hub {
@@ -221,6 +239,15 @@ func (h *hub) broadcast(v any) {
 	}
 }
 
+// Shared room objects travel with every welcome and snapshot.
+func (h *hub) world() map[string]any {
+	return map[string]any{"fridgeOpen": h.fridgeOpen}
+}
+
+func (h *hub) snapshot() map[string]any {
+	return map[string]any{"type": "snapshot", "players": h.players(), "world": h.world()}
+}
+
 func (h *hub) players() []player {
 	result := make([]player, 0, len(h.peers))
 	for p := range h.peers {
@@ -236,6 +263,9 @@ func (h *hub) players() []player {
 
 func validMove(p *peer, m input, now time.Time) bool {
 	if math.IsNaN(m.Speaking) || math.IsInf(m.Speaking, 0) || m.Speaking < 0 || m.Speaking > 1 {
+		return false
+	}
+	if math.IsNaN(m.Drink) || math.IsInf(m.Drink, 0) || m.Drink < 0 || m.Drink > maxDrink {
 		return false
 	}
 	if math.IsNaN(m.X) || math.IsNaN(m.Y) || math.IsNaN(m.Z) || math.IsNaN(m.Punch) || math.IsNaN(m.PunchLeft) || math.IsNaN(m.Rotation) ||
@@ -321,6 +351,9 @@ func (h *hub) handle(c command, now time.Time) {
 	if c.leave {
 		if h.peers[p] {
 			delete(h.peers, p)
+			if len(h.peers) == 0 {
+				h.fridgeOpen = false
+			}
 			h.broadcast(map[string]any{"type": "leave", "id": p.player.ID})
 			if h.ownedDesk(p.tokenHash) >= 0 {
 				h.broadcastDesks() // The owner's status light may turn offline.
@@ -341,6 +374,8 @@ func (h *hub) handle(c command, now time.Time) {
 		p.player.Voice = false
 		p.player.Speaking = 0
 		p.player.Camera = false
+		p.player.Holding = "none"
+		p.player.Drink = 0
 		p.player.Z = 6
 		p.player.Appearance = defaultAppearance(p.player.Color)
 		if selected, valid := parseAppearance(m.Appearance); valid {
@@ -353,7 +388,7 @@ func (h *hub) handle(c command, now time.Time) {
 		p.lastMove = now
 		p.joined = true
 		h.peers[p] = true
-		h.send(p, map[string]any{"type": "welcome", "id": p.player.ID, "players": h.players()})
+		h.send(p, map[string]any{"type": "welcome", "id": p.player.ID, "players": h.players(), "world": h.world()})
 		h.broadcast(map[string]any{"type": "join", "player": p.player})
 		if h.ownedDesk(p.tokenHash) >= 0 {
 			h.broadcastDesks() // The owner's status light comes back online.
@@ -375,7 +410,7 @@ func (h *hub) handle(c command, now time.Time) {
 		if selected, valid := parseAppearance(m.Appearance); valid {
 			p.player.Appearance = selected
 			p.player.Color = selected.TopColor
-			h.broadcast(map[string]any{"type": "snapshot", "players": h.players()})
+			h.broadcast(h.snapshot())
 		}
 	case "voice":
 		if m.Enabled != nil {
@@ -403,7 +438,7 @@ func (h *hub) handle(c command, now time.Time) {
 	case "camera":
 		if m.Enabled != nil && p.player.Camera != *m.Enabled {
 			p.player.Camera = *m.Enabled
-			h.broadcast(map[string]any{"type": "snapshot", "players": h.players()})
+			h.broadcast(h.snapshot())
 		}
 	case "camera-signal":
 		// Only relay bounded SDP to another joined player. Identity is server-owned.
@@ -444,6 +479,10 @@ func (h *hub) handle(c command, now time.Time) {
 		p.player.X, p.player.Z, p.player.Rotation = m.X, m.Z, m.Rotation
 		p.player.Y, p.player.Punch = m.Y, m.Punch
 		p.player.PunchLeft = m.PunchLeft
+		p.player.Drink = 0
+		if p.player.Holding == "beer" {
+			p.player.Drink = m.Drink
+		}
 		p.player.Speaking = 0
 		if p.player.Voice {
 			p.player.Speaking = m.Speaking
@@ -453,6 +492,33 @@ func (h *hub) handle(c command, now time.Time) {
 			p.player.Animation = m.Animation
 		}
 		p.lastMove = now
+	case "interact":
+		// Cosmetic shared state: the hub owns the door; each player owns only their hands.
+		if now.Sub(p.lastInteract) < 250*time.Millisecond {
+			return
+		}
+		changed := false
+		switch m.Action {
+		case "toggle-fridge":
+			if nearFridge(p.player) {
+				h.fridgeOpen = !h.fridgeOpen
+				changed = true
+			}
+		case "take-beer":
+			if h.fridgeOpen && nearFridge(p.player) && p.player.Holding != "beer" {
+				p.player.Holding = "beer"
+				changed = true
+			}
+		case "drop":
+			if p.player.Holding == "beer" {
+				p.player.Holding, p.player.Drink = "none", 0
+				changed = true
+			}
+		}
+		if changed {
+			p.lastInteract = now
+			h.broadcast(h.snapshot())
+		}
 	case "chat":
 		text := clean(m.Text, 300)
 		if text == "" || now.Sub(p.lastChat) < 400*time.Millisecond {
@@ -482,7 +548,7 @@ func (h *hub) run(ctx context.Context) {
 			h.handle(c, time.Now())
 		case <-ticker.C:
 			if len(h.peers) > 0 {
-				h.broadcast(map[string]any{"type": "snapshot", "players": h.players()})
+				h.broadcast(h.snapshot())
 			}
 		}
 	}

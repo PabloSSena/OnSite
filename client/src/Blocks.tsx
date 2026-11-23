@@ -1,3 +1,4 @@
+import Fridge from './Fridge'
 import { box, type Box } from './world'
 
 export function Block({ data }: { data: Box }) {
@@ -9,6 +10,7 @@ export function Block({ data }: { data: Box }) {
 
 export function Furnishing({ data }: { data: Box }) {
   if (!data.kind) return <Block data={data} />
+  if (data.kind === 'fridge') return <Fridge data={data} />
   const [x, y, z] = data.position
   const [w, h, d] = data.size
   const seat = data.kind === 'chair'

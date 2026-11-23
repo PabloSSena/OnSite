@@ -11,7 +11,7 @@ function Turntable({ appearance }: { appearance: Appearance }) {
     <Avatar preview player={{
       id: 'preview', name: 'You', color: appearance.topColor, appearance,
       x: 0, y: 0, z: 0, rotation: 0, animation: 'idle',
-      punch: 0, punchLeft: 0, speaking: 0, voice: false, camera: false,
+      punch: 0, punchLeft: 0, speaking: 0, voice: false, camera: false, holding: 'none', drink: 0,
     }} />
   </group>
 }

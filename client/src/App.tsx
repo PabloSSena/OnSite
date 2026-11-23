@@ -5,8 +5,19 @@ import Webcams, { WebcamSelfPreview } from './Webcams'
 import { connect, send, useNetwork } from './network'
 import { enableVoicePlayback, joinVoice, leaveVoice, toggleMicrophone, useVoice } from './voice'
 import { validGIFURL } from './gif'
+import { useInteraction } from './interaction'
 import AppearanceEditor from './AppearanceEditor'
 import { loadAppearance, saveAppearance, type Appearance } from './appearance'
+
+// Subscribes only to the hint store, which the render loop updates on change.
+function InteractionPrompt() {
+  const { prompt, holding } = useInteraction()
+  if (!prompt && !holding) return null
+  return <div className="interaction-prompt" role="status" aria-label="Interaction">
+    {prompt && <span><kbd>E</kbd> {prompt}</span>}
+    {holding && <span><kbd>R</kbd> Sip <span aria-hidden="true">·</span> <kbd>G</kbd> Drop</span>}
+  </div>
+}
 
 const labels = { offline: 'Offline', connecting: 'Connecting…', online: 'Live', reconnecting: 'Reconnecting… (room may be full)' }
 
@@ -171,10 +182,14 @@ export default function App() {
         <p className="desk-hint">Done or Esc closes this panel; press E afterwards to stand up.</p>
       </dialog>
       </>}
-      {joined && seatPrompt && deskPanel === null && <div className="seat-hint" role="status">{seatPrompt}</div>}
       {joined && <div className="help"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move <span>·</span>
-        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate <span>·</span> <kbd>E</kbd> Sit (desks too)<br />
+        <kbd>Space</kbd> Jump <span>·</span> Left / Right click Punch <span>·</span> <kbd>F</kbd> Alternate <span>·</span> <kbd>E</kbd> Use / sit<br />
         {viewMode === 'first-person' ? 'Click the scene to look around · Esc to release mouse / chat' : 'Click the scene to play · Click the chat to talk'}</div>}
+      {/* Seat and fridge prompts share one column so they never overlap. */}
+      {joined && <div className="hud-prompts">
+        {seatPrompt && deskPanel === null && <div className="seat-hint" role="status">{seatPrompt}</div>}
+        <InteractionPrompt />
+      </div>}
       {!joined ? (
         <div className="overlay">
           <div className="join-layout panel">

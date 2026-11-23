@@ -65,6 +65,13 @@ export function sitPose(pose: ReturnType<typeof legPose>, blend: number) {
   return { hip, knee, ankle: -hip - knee }
 }
 
+// 0 → 1 → 0 over a sip: raise quickly, hold at the mouth, lower gently.
+export function sipLift(remaining: number, duration = 1.2) {
+  if (remaining <= 0) return 0
+  const t = 1 - Math.min(duration, remaining) / duration
+  return Math.min(1, t / 0.25, (1 - t) / 0.3)
+}
+
 export function punchExtension(remaining: number) {
   return remaining > 0 ? Math.sin(Math.PI * (1 - Math.min(0.32, remaining) / 0.32)) : 0
 }

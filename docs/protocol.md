@@ -23,11 +23,16 @@ Client → server:
   `kind` (`offer` or `answer`), `sdp` (1–16384 bytes).
   Offers require the sender's camera on; answers require the recipient's camera on.
   At most 40 camera signaling attempts per second per connection, independently of voice's 80-attempt limit; invalid signals are dropped.
+- `interact`: `action`, one of `toggle-fridge`, `take-beer`, or `drop`. See
+  [World interactions](#world-interactions). Accepted changes trigger an immediate snapshot.
+- `move` also takes an optional `drink` (seconds left in the sip animation, 0–1.2).
+  Nonfinite or out-of-range values reject the move. It is forced to zero unless the
+  player is holding a beer.
 
 Server → client:
-- `welcome`: `id`, `players` (initial state, including yourself).
+- `welcome`: `id`, `players` (initial state, including yourself), `world`.
 - `join`: `player` (also sent to the joining player).
-- `snapshot`: `players` (full state, 20 Hz).
+- `snapshot`: `players` (full state, 20 Hz), `world`.
 - `leave`: `id`.
 - `chat`: `id`, `name`, `text`, `at` (RFC3339 UTC). Broadcast to everyone, including the sender.
 - `gif`: `id` (connection identity), `url`. Broadcast to everyone, including the sender.
@@ -39,7 +44,31 @@ Server → client:
 - `camera-signal`: `from` (server-assigned sender ID), `session`, `kind`, `sdp`.
   Only delivered to the specified recipient through its bounded writer queue.
 
-`Player`: `{id, name, color, appearance, x, y, z, punch, punchLeft, speaking, rotation, animation, voice, camera}`.
+`Player`: `{id, name, color, appearance, x, y, z, punch, punchLeft, speaking, rotation, animation, voice, camera, holding, drink}`.
+`holding` is `none` or `beer`.
+`World`: `{fridgeOpen}`.
+
+### World interactions
+
+The kitchen fridge is centred at `(x: 14.6, z: -2.8)`, against the east wall, with its
+door facing -X. A player is in reach when the horizontal distance between their last
+accepted position and that centre is at most 2.0. The constants are duplicated in
+`client/src/world.ts` and `server/main.go`.
+
+- `toggle-fridge`: in reach. Opens or closes the shared door.
+- `take-beer`: in reach, door open, hands empty. Sets `holding: "beer"`.
+- `drop`: holding a beer. Sets `holding: "none"` and `drink: 0`. Works anywhere.
+
+The hub owns `fridgeOpen`. It persists while anyone is in the room and resets to closed
+when the room empties. Each player owns only their hands. Join and reconnection start
+with `holding: "none"`. At most one accepted interaction every 250 ms per connection;
+invalid, out-of-reach, or rate-limited requests are ignored without a reply.
+
+Clients send `interact` only when their local position is in reach, and they wait for a
+snapshot before showing the door or bottle change. The local `drink` timer is cosmetic:
+`R` starts a 1.2 s sip, and other players see it through `move`. While a player holds a
+beer, their right hand cannot punch; the left can. Beers are unlimited. There is no
+inventory, consumption, or persistence.
 
 ### Appearance
 
@@ -81,6 +110,10 @@ position and facing. E, movement, or Space glides back to the spot you sat down 
 Other clients look up the seat at the sitter's position to pose the avatar. The server
 does not know about seats and does not reserve them: two players can sit in the same
 spot. Like furniture collision, this is not authoritative.
+**One E key.** Seats, desks, and the fridge share E, resolved nearest-thing-first on the
+client: while seated, E stands up; standing within fridge reach, E uses the fridge (the
+seat prompt is hidden there); otherwise E sits, and a desk chair opens its desk. R sips
+and G drops a held beer anywhere.
 Chat uses connection identity and renders text through React, never HTML.
 GIFs load directly from external hosts in a bounded `<img>` with no referrer.
 The server does not download, proxy, or verify image contents; failed loads show a fallback.

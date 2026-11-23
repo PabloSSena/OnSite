@@ -2,7 +2,7 @@ export type Box = {
   position: [number, number, number]
   size: [number, number, number]
   color: string
-  kind?: 'table' | 'chair'
+  kind?: 'table' | 'chair' | 'fridge'
   // Chairs only: radians around Y, same convention as player rotation (0 faces -Z).
   facing?: number
 }
@@ -34,6 +34,15 @@ export const walls: Box[] = [
   ...[-23, 23].map(z => box(0, 0.6, z, 46, 1.2, 0.2, '#9caa86')),
 ]
 
+// The kitchen fridge stands against the east wall with its door facing -X.
+// Keep the position and reach in sync with fridgeX/fridgeZ/fridgeReach in server/main.go.
+export const fridge: Box = { ...box(14.6, 1, -2.8, 1.4, 2, 1.4, '#e4dfd3'), kind: 'fridge' }
+export const FRIDGE_REACH = 2
+export const nearFridge = (x: number, z: number) =>
+  Math.hypot(x - fridge.position[0], z - fridge.position[2]) <= FRIDGE_REACH
+// Seconds of the synchronized sip animation (server cap: maxDrink).
+export const SIP_DURATION = 1.2
+
 // Ten claimable desks: a 3x2 studio grid and two pairs flanking the meeting table.
 // Keep in sync with deskPositions in server/desks.go (a Go test checks it).
 export const desks = [[-13.4, -12], [-9.2, -12], [-5, -12], [-13.4, -8.5], [-9.2, -8.5], [-5, -8.5], [5, -12], [13.4, -12], [5, -8.5], [13.4, -8.5]] as const
@@ -51,7 +60,7 @@ export const sharedFurniture: Box[] = [
   table(-9, 0.22, 0, 2.8, 0.44, 1.6, '#b98253'),
   box(-5, 0.4, 1, 1.5, 0.8, 1.5, '#c38a58'),
   box(10, 0.55, -4.9, 9, 1.1, 1.4, '#718476'),
-  box(14.6, 1, -2.8, 1.4, 2, 1.4, '#e4dfd3'),
+  fridge,
   table(8.5, 0.48, 0, 3.8, 0.96, 1.7, '#b98253'),
   ...[6.8, 8.5, 10.2].map(x => chair(0, x, 0.35, 1.6, 0.7, 0.7, 0.7, '#d2ad6a')),
   // Outdoor picnic table and benches, off the clear entrance path.
