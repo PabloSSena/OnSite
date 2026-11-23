@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Group, PlaneGeometry } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
+import { MIRROR_GIF_LAYER } from './MirrorGIFs'
 
 export default function WallMirror() {
   const surface = useRef<Group>(null)
@@ -22,6 +23,7 @@ export default function WallMirror() {
     // Include the local full-body avatar, but never the layer-2 viewmodel.
     mirror.camera.layers.set(0)
     mirror.camera.layers.enable(1)
+    mirror.camera.layers.enable(MIRROR_GIF_LAYER)
     group.add(mirror)
 
     return () => {

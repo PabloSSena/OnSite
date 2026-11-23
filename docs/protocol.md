@@ -115,6 +115,11 @@ and G drops a held beer anywhere.
 Text chat is not supported. Legacy `chat` messages from joined clients are ignored
 without a reply or broadcast. Desk notes remain supported separately.
 GIFs load directly from external hosts in a bounded `<img>` with no referrer.
+Clients also draw a mirror-only 3D card with the same eight-second lifetime,
+including the local player's first-person reaction. This fetch uses CORS and no
+referrer; denied cross-origin access shows a fallback in the mirror without
+removing the DOM reaction. WebCodecs-capable browsers animate the reflected card;
+other browsers show a static frame.
 The server does not download, proxy, or verify image contents; failed loads show a fallback.
 Media hosts see viewers' IP addresses. Links can expire, particularly Discord attachments.
 The outgoing queue is bounded: slow clients are disconnected without blocking the hub.

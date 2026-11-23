@@ -7,6 +7,7 @@ import { deskOfSeat, desks, nearestSeat, nearFridge, SIP_DURATION, stepPhysics, 
 import { SEATED_HIP_LIFT, STANDING_HIP } from './avatarMotion'
 import { fridgeAction, fridgePrompt, setInteractionHint } from './interaction'
 import WallMirror from './Mirror'
+import MirrorGIFs from './MirrorGIFs'
 import Avatar, { FirstPersonFists } from './Avatar'
 import { OfficeWorld } from './OfficeWorld'
 import WorldCameras from './WorldCameras'
@@ -350,6 +351,7 @@ function Scene({ viewMode, focusDesk }: { viewMode: ViewMode; focusDesk: number 
         shadow-camera-top={30} shadow-camera-bottom={-30} shadow-camera-far={80} shadow-normalBias={0.04} />
       <OfficeWorld obstacles={obstacles} annotations={connected} />
       <WallMirror />
+      <MirrorGIFs />
       <Controller obstacles={obstacles} viewMode={viewMode} focusDesk={focusDesk} />
       {connected && Object.values(players).map(p => <Avatar key={p.id} player={p} local={p.id === id}
         firstPerson={p.id === id && viewMode === 'first-person'} />)}

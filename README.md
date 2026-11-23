@@ -66,7 +66,8 @@ Mouse capture requires a supported desktop browser on localhost or HTTPS.
 - Press **E** again, move, or jump to stand back up where you were.
 - Seats aren't reserved, so two people can end up in the same spot.
 - The mirror adds one scene render when visible; its fixed 1024×512 reflection
-  target limits GPU cost. DOM name tags and panels are not part of the reflected scene.
+  target limits GPU cost. GIF reactions appear in the mirror, including your own
+  reaction in first person. DOM name tags and control panels are not reflected.
 
 ### Characters and animation
 
@@ -158,6 +159,11 @@ This is local link history, not shared chat history.
 Reactions are limited to one every 2 seconds and replace your previous GIF.
 Images load from the external host, which receives viewers' IP addresses.
 Expired/broken links show “GIF unavailable”; no uploads or link scraping are provided.
+Mirror reactions use a separate 3D card with the same eight-second lifetime.
+The media host must permit cross-origin image access for that card; otherwise
+the mirror shows “GIF unavailable” while the ordinary reaction can still work.
+Browsers with WebCodecs GIF decoding animate the reflection; other browsers show
+a static frame. Decoders and textures are released on expiry, replacement, or leave.
 
 ```sh
 docker compose logs -f
