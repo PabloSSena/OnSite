@@ -1,5 +1,11 @@
 import { expect, type Page } from '@playwright/test'
 
+export async function openGIFs(page: Page) {
+  const toggle = page.getByRole('button', { name: 'GIFs', exact: true })
+  if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+}
+
 export async function openMenu(page: Page) {
   const menu = page.getByRole('button', { name: 'Menu', exact: true })
   await expect(menu).toHaveAttribute('aria-expanded', /^(true|false)$/)

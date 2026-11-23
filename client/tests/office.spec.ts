@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
-import { openMenu } from './helpers'
+import { openGIFs, openMenu } from './helpers'
 
-test('first-person supports mouse look, relative movement, collision, chat, and switching back', async ({ page }) => {
+test('first-person supports mouse look, relative movement, collision, GIF input, and switching back', async ({ page }) => {
   const errors: string[] = []
   let position = { x: 0, z: 6, rotation: 0 }
   page.on('pageerror', error => errors.push(error.message))
@@ -43,9 +43,11 @@ test('first-person supports mouse look, relative movement, collision, chat, and 
   await page.screenshot({ path: 'test-results/first-person.png' })
   await page.keyboard.press('Escape')
   await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true)
-  await page.getByRole('textbox', { name: 'Message' }).fill('First-person works!')
-  await page.getByRole('textbox', { name: 'Message' }).press('Enter')
-  await expect(page.getByRole('log')).toContainText('First-person works!')
+  await openGIFs(page)
+  await page.getByRole('textbox', { name: 'GIF link', exact: true }).fill('https://tenor.com/not-a-direct-image')
+  await page.getByRole('button', { name: 'GIF', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('direct HTTPS .gif')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await openMenu(page)
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
@@ -53,7 +55,7 @@ test('first-person supports mouse look, relative movement, collision, chat, and 
   expect(errors).toEqual([])
 })
 
-test('two tabs render movement, exchange chat messages, and remove players who leave', async ({ browser }) => {
+test('two tabs render movement without text chat and remove players who leave', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 960, height: 600 } })
   const ana = await context.newPage()
   const bia = await context.newPage()
@@ -88,10 +90,10 @@ test('two tabs render movement, exchange chat messages, and remove players who l
     const after = await tag.boundingBox()
     return Math.abs((after?.x ?? before!.x) - before!.x)
   }).toBeGreaterThan(15)
-  await ana.getByRole('textbox', { name: 'Message' }).fill('wasd: hi, Bia!')
-  await ana.getByRole('textbox', { name: 'Message' }).press('Enter')
-  await expect(bia.getByRole('log')).toContainText('wasd: hi, Bia!')
-  await expect(ana.getByRole('log')).toContainText('wasd: hi, Bia!')
+  for (const page of [ana, bia]) {
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('log')).toHaveCount(0)
+  }
   await bia.screenshot({ path: 'test-results/office.png' })
   await openMenu(ana)
   await ana.getByRole('button', { name: 'Leave', exact: true }).click()

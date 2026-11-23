@@ -15,7 +15,9 @@ test('joined HUD starts collapsed, keeps controls mounted, and has no header or 
   await expect(page.locator('.presence')).toBeHidden()
   await expect(page.getByRole('button', { name: 'First-person view', includeHidden: true })).toBeHidden()
   await expect(page.getByRole('button', { name: 'Leave', exact: true, includeHidden: true })).toBeHidden()
-  await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('region', { name: 'Room chat' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'GIFs', exact: true })).toHaveAttribute('aria-expanded', 'false')
   for (const text of [
     'THE STUDIO', 'IDEA ROOM', 'LIVING ROOM', 'THE KITCHEN', 'THE COMMONS', 'THE GARDEN',
     'Make something good', 'Big plans, small team', 'Take a little break',

@@ -69,13 +69,12 @@ function Controller({ obstacles, viewMode, focusDesk }: {
       let yaw = Math.atan2(-tx, -tz)
       let pitch = Math.atan2(ty, Math.hypot(tx, tz))
       const view = gl.domElement.getBoundingClientRect()
-      let left = view.left, right = view.right, bottom = view.bottom
+      let left = view.left, bottom = view.bottom
+      const right = view.right
       const panel = document.querySelector('.desk-panel')?.getBoundingClientRect()
-      const chat = document.querySelector('.chat')?.getBoundingClientRect()
       const middleX = view.left + view.width / 2
       if (panel && panel.width < view.width * 0.8 && panel.right < middleX + view.width * 0.25) left = panel.right
       else if (panel && panel.top > view.top + view.height * 0.3) bottom = panel.top // mobile bottom sheet
-      if (chat && chat.left > middleX && chat.left > left) right = chat.left
       const tanHalf = Math.tan(THREE.MathUtils.degToRad((camera as THREE.PerspectiveCamera).fov / 2))
       const ndcX = ((left + right) / 2 - middleX) / (view.width / 2)
       const ndcY = ((view.top + bottom) / 2 - (view.top + view.height / 2)) / (view.height / 2)

@@ -106,7 +106,7 @@ test('webcam reaches late viewers, supports simultaneous cameras, toggling, and 
   expect(errors).toEqual([])
 })
 
-test('camera denial displays an error and leaves room chat usable', async ({ page }) => {
+test('camera denial displays an error and leaves GIF sharing usable', async ({ page }) => {
   await page.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = async () => {
       throw new DOMException('Camera permission denied', 'NotAllowedError')
@@ -116,7 +116,8 @@ test('camera denial displays an error and leaves room chat usable', async ({ pag
   await page.getByRole('button', { name: 'Turn camera on', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('Camera permission denied')
   await expect(page.locator('video')).toHaveCount(0)
-  await page.getByRole('textbox', { name: 'Message' }).fill('Still here')
-  await page.getByRole('button', { name: 'Send message' }).click()
-  await expect(page.getByRole('log')).toContainText('Still here')
+  await page.getByRole('button', { name: 'GIFs', exact: true }).click()
+  await page.getByRole('textbox', { name: 'GIF link', exact: true }).fill('https://tenor.com/not-a-direct-image')
+  await page.getByRole('button', { name: 'GIF', exact: true }).click()
+  await expect(page.getByText('Use a direct HTTPS .gif link', { exact: false })).toBeVisible()
 })

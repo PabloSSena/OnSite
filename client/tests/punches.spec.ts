@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { openGIFs } from './helpers'
 
 type Pose = { punch: number; punchLeft: number; y: number }
 
-test('independent arms sync, alternate on F, and respect capture and chat focus', async ({ context }) => {
+test('independent arms sync, alternate on F, and respect capture and GIF input focus', async ({ context }) => {
   test.setTimeout(240000)
   const actor = await context.newPage()
   const observer = await context.newPage()
@@ -118,17 +119,18 @@ test('independent arms sync, alternate on F, and respect capture and chat focus'
     !canvas.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })))).toBe(true)
   await actor.keyboard.press('Escape')
   await check.poll(() => actor.evaluate(() => document.pointerLockElement === null), poll).toBe(true)
-  const chat = actor.getByRole('textbox', { name: 'Message' })
-  await chat.focus()
+  await openGIFs(actor)
+  const input = actor.getByRole('textbox', { name: 'GIF link', exact: true })
+  await input.focus()
   await quiet()
   const typing = sent.length
   await actor.keyboard.press('KeyF')
   await actor.keyboard.press('Space')
   await pointer(0, 2)
   await quiet()
-  await check(chat).toHaveValue('f ')
+  await check(input).toHaveValue('f ')
   expect(sent.slice(typing).every(p => p.punch === 0 && p.punchLeft === 0 && p.y === 0)).toBe(true)
-  expect(await chat.evaluate(input =>
+  expect(await input.evaluate(input =>
     input.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })))).toBe(true)
 
   // Third person accepts either mouse button without pointer capture.

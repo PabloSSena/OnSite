@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { openMenu } from './helpers'
+import { openGIFs, openMenu } from './helpers'
 
 type ActionState = { x: number; y: number; z: number; punch: number; punchLeft: number }
 
@@ -71,7 +71,8 @@ test('actions sync to a second tab, respect input focus, and work in first-perso
     await check.poll(() => samples.slice(punchStart).some(p => p.punch > 0 || p.punchLeft > 0), poll).toBe(true)
     await check.poll(() => latest() && latest()!.punch + latest()!.punchLeft, poll).toBe(0)
 
-    const message = actor.getByRole('textbox', { name: 'Message' })
+    await openGIFs(actor)
+    const message = actor.getByRole('textbox', { name: 'GIF link', exact: true })
     await message.focus()
     const typingStart = samples.length
     await actor.keyboard.press('Space')
