@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { openMenu } from './helpers'
 
-test('articulated avatar renders in the mirror, walks, and keeps first-person legs visible', async ({ page }, testInfo) => {
+test('articulated avatar with a hard hat renders in the mirror, walks, and keeps first-person legs visible', async ({ page }, testInfo) => {
   test.setTimeout(120000)
   const errors: string[] = []
   let position = { x: 0, z: 6 }
@@ -11,6 +11,7 @@ test('articulated avatar renders in the mirror, walks, and keeps first-person le
     if (message.type === 'move') position = message
   }))
   await page.goto('/')
+  await page.getByLabel('Hat', { exact: true }).selectOption('engineer')
   await page.getByLabel('What should we call you?').fill('Animation tester')
   await page.getByRole('button', { name: 'Join the office' }).click()
   await expect(page.locator('.presence')).toContainText('Live', { timeout: 15000 })

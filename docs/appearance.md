@@ -3,6 +3,10 @@
 ## Behavior
 
 - Choose separate tops, bottoms, shoes, skin, hair, hats, face, and backpack.
+- Hats include an engineer hard hat, cowboy hat, feather headband, beanie, and cap.
+  Selecting the engineer hard hat starts with safety yellow; its color remains editable.
+  Hats follow head motion, appear in the preview and mirror, and stay hidden from
+  the wearer's first-person camera without changing the view mode.
 - Colors are curated palettes, not arbitrary CSS or uploaded textures.
 - The entry screen and **Menu → Customize character** show a rotating preview.
 - Editing during play applies immediately; closing the editor does not reconnect.
@@ -27,6 +31,7 @@ F alternates arms. These are animations, not damage or physics interactions.
 - `client/src/AppearanceEditor.tsx`, `CharacterPreview.tsx`, `appearance.css`: editor.
 - `client/src/App.tsx`: entry/menu/dialog, saving and live updates.
 - `client/src/Avatar.tsx`: clothing, face, skin, hair and first-person sleeves.
+- `client/src/AvatarHat.tsx`: procedural hats attached to the head.
 - `client/src/network.ts`, `server/main.go`, `docs/protocol.md`: shared contract.
 - `client/src/WorldCameras.tsx`, `cameraVideo.ts`, `Webcams.tsx`: camera presentation.
 

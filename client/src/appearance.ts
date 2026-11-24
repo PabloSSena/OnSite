@@ -18,6 +18,11 @@ export const SKIN_TONES = [
   { label: 'Deep brown', value: '#533528' },
 ] as const
 
+export const HAT_COLORS = [
+  { label: 'Safety yellow', value: '#ffd43b' },
+  ...CLOTHING_COLORS,
+] as const
+
 export const HAIR_COLORS = [
   { label: 'Auburn', value: '#a65d45' },
   { label: 'Black', value: '#25333e' },
@@ -37,7 +42,7 @@ export type Appearance = {
   skin: string
   hair: 'short' | 'bob' | 'none'
   hairColor: string
-  hat: 'none' | 'beanie' | 'cap'
+  hat: 'none' | 'beanie' | 'cap' | 'engineer' | 'cowboy' | 'feather'
   hatColor: string
   backpack: boolean
   backpackColor: string
@@ -66,10 +71,11 @@ export function parseAppearance(value: unknown): Appearance | null {
       !['trousers', 'shorts'].includes(a.bottom as string) ||
       !['boots', 'sneakers'].includes(a.shoes as string) ||
       !['short', 'bob', 'none'].includes(a.hair as string) ||
-      !['none', 'beanie', 'cap'].includes(a.hat as string) ||
+      !['none', 'beanie', 'cap', 'engineer', 'cowboy', 'feather'].includes(a.hat as string) ||
       !['smile', 'neutral', 'surprised'].includes(a.face as string) ||
       typeof a.backpack !== 'boolean' ||
-      !['topColor', 'bottomColor', 'shoeColor', 'hatColor', 'backpackColor'].every(key => clothingColor(a[key])) ||
+      !['topColor', 'bottomColor', 'shoeColor', 'backpackColor'].every(key => clothingColor(a[key])) ||
+      !HAT_COLORS.some(color => color.value === a.hatColor) ||
       !SKIN_TONES.some(color => color.value === a.skin) ||
       !HAIR_COLORS.some(color => color.value === a.hairColor)) return null
   return { ...a } as Appearance

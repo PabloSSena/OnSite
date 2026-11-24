@@ -10,6 +10,7 @@ import GIFBubble from './GIFBubble'
 import { defaultAppearance } from './appearance'
 import { advanceMouth } from './speechMotion'
 import { BEER_GRIP, beerArmPose, firstPersonBeerPose } from './beerMotion'
+import AvatarHat from './AvatarHat'
 
 const ink = '#25333e'
 
@@ -210,7 +211,7 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
               <sphereGeometry args={[0.24, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
               <meshStandardMaterial color={appearance.hairColor} roughness={1} flatShading />
             </mesh>
-            {appearance.hair === 'short' ? [-1, 0, 1].map(side => <mesh key={side}
+            {appearance.hair === 'short' ? (appearance.hat === 'none' || appearance.hat === 'feather') && [-1, 0, 1].map(side => <mesh key={side}
               position={[side * 0.085, 0.19, -0.12]} rotation={[0.15, 0, side * -0.2]} castShadow>
               <boxGeometry args={[0.075, 0.09, 0.1]} />
               <meshStandardMaterial color={appearance.hairColor} roughness={1} flatShading />
@@ -225,25 +226,7 @@ export default function Avatar({ player, local = false, firstPerson = false, pre
               </mesh>
             </group>}
             </group>}
-            {appearance.hat !== 'none' && <group>
-              <mesh position={[0, 0.08, 0]} castShadow>
-                <sphereGeometry args={[0.255, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2]} />
-                <meshStandardMaterial color={appearance.hatColor} roughness={1} flatShading />
-              </mesh>
-              {appearance.hat === 'beanie' ? <group>
-                <mesh position={[0, 0.105, 0]} rotation={[Math.PI / 2, 0, 0]}>
-                  <torusGeometry args={[0.245, 0.025, 5, 12]} />
-                  <meshStandardMaterial color={appearance.hatColor} roughness={1} />
-                </mesh>
-                <mesh position={[0, 0.35, 0]} castShadow>
-                  <sphereGeometry args={[0.055, 8, 6]} />
-                  <meshStandardMaterial color={appearance.hatColor} roughness={1} flatShading />
-                </mesh>
-              </group> : <mesh position={[0, 0.09, -0.23]} scale={[1, 0.15, 1]} castShadow>
-                <sphereGeometry args={[0.18, 10, 6]} />
-                <meshStandardMaterial color={appearance.hatColor} roughness={1} flatShading />
-              </mesh>}
-            </group>}
+            <AvatarHat style={appearance.hat} color={appearance.hatColor} />
             <group ref={eyes} position={[0, 0.025, -0.207]}>
               {[-1, 1].map(side => (
                 <group key={side} position={[side * 0.085, 0, 0]}>

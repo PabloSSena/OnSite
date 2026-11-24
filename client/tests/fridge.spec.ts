@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { colliders, fridge, FRIDGE_REACH, nearFridge } from '../src/world'
 import { fridgeAction, fridgePrompt } from '../src/interaction'
-import { closeMenu, openMenu } from './helpers'
+import { closeMenu, openMenu, walkUntilSent } from './helpers'
 
 test('fridge reach, actions, and collision', () => {
   const [x, , z] = fridge.position
@@ -19,12 +19,16 @@ test('fridge reach, actions, and collision', () => {
 type Seen = { x: number; z: number; holding?: string; drink?: number }
 
 async function join(page: Page, name: string) {
-  const state = { me: { x: 0, z: 6 } as Seen, players: {} as Record<string, Seen>, fridgeOpen: false }
+  const state = { me: { x: 0, z: 6 } as Seen, players: {} as Record<string, Seen>,
+    fridgeOpen: false, sips: [] as string[] }
   page.on('websocket', ws => ws.on('framereceived', frame => {
     const message = JSON.parse(frame.payload.toString())
     if (message.type !== 'snapshot') return
     state.fridgeOpen = message.world?.fridgeOpen === true
-    for (const p of message.players) state.players[p.name] = p
+    for (const p of message.players) {
+      state.players[p.name] = p
+      if (p.drink > 0) state.sips.push(p.name)
+    }
     if (state.players[name]) state.me = state.players[name]
   }))
   await page.goto('/')
@@ -41,7 +45,7 @@ test('open the fridge, grab a beer, sip, and drop it, seen by a friend', async (
   const page = await first.newPage()
   const friend = await second.newPage()
   page.on('pageerror', error => errors.push(error.message))
-  const mine = await join(page, 'Fridge raider')
+  await join(page, 'Fridge raider')
   const theirs = await join(friend, 'Thirsty friend')
 
   await openMenu(page)
@@ -50,21 +54,12 @@ test('open the fridge, grab a beer, sip, and drop it, seen by a friend', async (
   await expect(firstPerson).toHaveAttribute('aria-pressed', 'false')
   await page.locator('canvas').click({ position: { x: 500, y: 300 } })
 
-  async function walk(key: string, reached: () => boolean) {
-    await page.keyboard.down(key)
-    try {
-      await expect.poll(() => ({ reached: reached(), x: mine.me.x, z: mine.me.z }),
-        { timeout: 90000, intervals: [100] }).toMatchObject({ reached: true })
-    } finally {
-      await page.keyboard.up(key)
-    }
-  }
   // Up the hall, through the kitchen doorway (z -3..2 at x = 2), around the kitchen
-  // table, then along the fridge's front. Each leg tolerates overshoot from slow frames.
-  await walk('KeyW', () => mine.me.z < 1)
-  await walk('KeyD', () => mine.me.x > 6)
-  await walk('KeyW', () => mine.me.z < -2)
-  await walk('KeyD', () => mine.me.x > 13.2)
+  // table, then along the fridge's front. Release on the outgoing move to avoid overshoot.
+  await walkUntilSent(page, 'KeyW', 'z', '<=', 0.9)
+  await walkUntilSent(page, 'KeyD', 'x', '>=', 6.1)
+  await walkUntilSent(page, 'KeyW', 'z', '<=', -2.1)
+  await walkUntilSent(page, 'KeyD', 'x', '>=', 13.3)
 
   // The server accepts at most one interaction every 250 ms.
   const press = async (key: string) => { await page.waitForTimeout(300); await page.keyboard.press(key) }
@@ -89,7 +84,8 @@ test('open the fridge, grab a beer, sip, and drop it, seen by a friend', async (
   await page.locator('canvas').click({ position: { x: 500, y: 300 } })
 
   await press('KeyR')
-  await expect.poll(() => theirs.players['Fridge raider']?.drink ?? 0).toBeGreaterThan(0)
+  // Retain transient observations: a slow automation round trip can outlast the sip.
+  await expect.poll(() => theirs.sips.includes('Fridge raider')).toBe(true)
   await press('KeyG')
   await expect.poll(() => theirs.players['Fridge raider']?.holding).toBe('none')
   await expect(prompt).not.toContainText('Sip')

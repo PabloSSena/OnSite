@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { CLOTHING_COLORS, HAIR_COLORS, SKIN_TONES, type Appearance } from './appearance'
+import { CLOTHING_COLORS, HAIR_COLORS, HAT_COLORS, SKIN_TONES, type Appearance } from './appearance'
 import CharacterPreview from './CharacterPreview'
 import './appearance.css'
 
@@ -10,7 +10,10 @@ export default function AppearanceEditor({ value, onChange }: {
   const select = (key: 'top' | 'bottom' | 'shoes' | 'hair' | 'hat' | 'face', label: string,
     options: readonly (readonly [string, string])[]) =>
     <div className="appearance-select"><label htmlFor={`${prefix}-${key}`}>{label}</label>
-      <select id={`${prefix}-${key}`} value={value[key]} onChange={e => onChange({ ...value, [key]: e.target.value })}>
+      <select id={`${prefix}-${key}`} value={value[key]} onChange={e => onChange({
+        ...value, [key]: e.target.value,
+        ...(key === 'hat' && e.target.value === 'engineer' ? { hatColor: '#ffd43b' } : {}),
+      })}>
         {options.map(([id, text]) => <option key={id} value={id}>{text}</option>)}
       </select>
     </div>
@@ -39,11 +42,12 @@ export default function AppearanceEditor({ value, onChange }: {
       {palette('skin', 'Skin tone', SKIN_TONES)}
       <div className="appearance-selects">
         {select('hair', 'Hair', [['short', 'Short'], ['bob', 'Bob'], ['none', 'No hair']])}
-        {select('hat', 'Hat', [['none', 'No hat'], ['beanie', 'Beanie'], ['cap', 'Cap']])}
+        {select('hat', 'Hat', [['none', 'No hat'], ['engineer', 'Engineer hard hat'],
+          ['cowboy', 'Cowboy hat'], ['feather', 'Feather headband'], ['beanie', 'Beanie'], ['cap', 'Cap']])}
         {select('face', 'Face', [['smile', 'Smile'], ['neutral', 'Neutral'], ['surprised', 'Surprised']])}
       </div>
       {palette('hairColor', 'Hair color', HAIR_COLORS)}
-      {palette('hatColor', 'Hat color')}
+      {palette('hatColor', 'Hat color', HAT_COLORS)}
       <label className="appearance-backpack"><input type="checkbox" checked={value.backpack}
         onChange={e => onChange({ ...value, backpack: e.target.checked })} /> Wear backpack</label>
       {palette('backpackColor', 'Backpack color')}

@@ -74,10 +74,12 @@ Exactly 14 fields, at most 1,024 JSON bytes:
 
 - `top`: `tee`, `hoodie`, or `jacket`.
 - `bottom`: `trousers` or `shorts`; `shoes`: `boots` or `sneakers`.
-- `hair`: `short`, `bob`, or `none`; `hat`: `none`, `beanie`, or `cap`.
+- `hair`: `short`, `bob`, or `none`.
+- `hat`: `none`, `beanie`, `cap`, `engineer` (hard hat), `cowboy`, or `feather` (feather headband).
 - `face`: `smile`, `neutral`, or `surprised`; `backpack`: boolean.
 - `topColor`, `bottomColor`, `shoeColor`, `hatColor`, `backpackColor`: one of
   `#52d6b1`, `#ffb86b`, `#b69cff`, `#72baff`, `#ff7c9a`, `#25333e`, `#fff0d3`, `#b58453`.
+  `hatColor` additionally accepts safety yellow (`#ffd43b`).
 - `skin`: one of `#f7dfcf`, `#efc9a9`, `#d9a47c`, `#b97953`, `#885438`, `#533528`.
 - `hairColor`: one of `#a65d45`, `#25333e`, `#51382c`, `#805539`, `#d5b477`, `#c4c5c3`.
 

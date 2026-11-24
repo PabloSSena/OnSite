@@ -58,7 +58,8 @@ func TestAppearanceJoinAndLiveBroadcast(t *testing.T) {
 	b := &peer{joined: true, player: player{ID: "b"}, send: make(chan []byte, 16)}
 	h.peers[b] = true
 	selected := defaultAppearance("#ff7c9a")
-	selected.Top, selected.Hat, selected.Backpack = "hoodie", "cap", false
+	selected.Top, selected.Hat, selected.Backpack = "hoodie", "engineer", false
+	selected.HatColor = "#ffd43b"
 	raw, _ := json.Marshal(selected)
 	h.handle(command{peer: a, input: input{Type: "appearance", Name: "spoof", Appearance: raw}}, now)
 	if a.player.Appearance != selected || a.player.Color != selected.TopColor || a.player.ID != "a" || a.player.Name != "Ana" {
@@ -88,5 +89,24 @@ func TestAppearanceJoinAndLiveBroadcast(t *testing.T) {
 	h.handle(command{peer: c, input: input{Type: "join", Name: "Custom", Appearance: raw}}, now)
 	if c.player.Appearance != selected {
 		t.Fatal("join must accept a valid complete selection")
+	}
+}
+
+func TestHatChoices(t *testing.T) {
+	for _, hat := range []string{"none", "beanie", "cap", "engineer", "cowboy", "feather"} {
+		t.Run(hat, func(t *testing.T) {
+			selected := defaultAppearance("#72baff")
+			selected.Hat, selected.HatColor = hat, "#ffd43b"
+			raw, _ := json.Marshal(selected)
+			if got, ok := parseAppearance(raw); !ok || got != selected {
+				t.Fatal("hat and safety yellow must round-trip")
+			}
+		})
+	}
+	selected := defaultAppearance("#72baff")
+	selected.TopColor = "#ffd43b"
+	raw, _ := json.Marshal(selected)
+	if _, ok := parseAppearance(raw); ok {
+		t.Fatal("hat-only yellow must not expand the clothing palette")
 	}
 }

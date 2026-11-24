@@ -144,10 +144,10 @@ func parseAppearance(raw json.RawMessage) (appearance, bool) {
 	}
 	return a, oneOf(a.Top, "tee", "hoodie", "jacket") &&
 		oneOf(a.Bottom, "trousers", "shorts") && oneOf(a.Shoes, "boots", "sneakers") &&
-		oneOf(a.Hair, "short", "bob", "none") && oneOf(a.Hat, "none", "beanie", "cap") &&
+		oneOf(a.Hair, "short", "bob", "none") && oneOf(a.Hat, "none", "beanie", "cap", "engineer", "cowboy", "feather") &&
 		oneOf(a.Face, "smile", "neutral", "surprised") &&
 		clothingColor(a.TopColor) && clothingColor(a.BottomColor) && clothingColor(a.ShoeColor) &&
-		clothingColor(a.HatColor) && clothingColor(a.BackpackColor) &&
+		(clothingColor(a.HatColor) || a.HatColor == "#ffd43b") && clothingColor(a.BackpackColor) &&
 		oneOf(a.Skin, "#f7dfcf", "#efc9a9", "#d9a47c", "#b97953", "#885438", "#533528") &&
 		oneOf(a.HairColor, "#a65d45", "#25333e", "#51382c", "#805539", "#d5b477", "#c4c5c3")
 }
