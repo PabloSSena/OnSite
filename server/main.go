@@ -187,11 +187,12 @@ type command struct {
 }
 
 type hub struct {
-	commands   chan command
-	peers      map[*peer]bool
-	desks      [len(deskPositions)]*desk
-	desksPath  string
-	fridgeOpen bool
+	allowedOrigins []string
+	commands       chan command
+	peers          map[*peer]bool
+	desks          [len(deskPositions)]*desk
+	desksPath      string
+	fridgeOpen     bool
 }
 
 func newHub() *hub {
@@ -544,7 +545,10 @@ func (h *hub) run(ctx context.Context) {
 }
 
 func (h *hub) serve(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, nil) // Same origin; Vite/nginx proxy the connection.
+	// Same-origin connections remain allowed; additional hosts are explicitly configured.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: h.allowedOrigins,
+	})
 	if err != nil {
 		return
 	}
@@ -627,6 +631,11 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	h := newHub()
+	for _, host := range strings.Split(os.Getenv("WS_ALLOWED_ORIGINS"), ",") {
+		if host = strings.TrimSpace(host); host != "" {
+			h.allowedOrigins = append(h.allowedOrigins, host)
+		}
+	}
 	h.desksPath = os.Getenv("DESKS_FILE")
 	h.desks = loadDesks(h.desksPath)
 	go h.run(ctx)

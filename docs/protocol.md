@@ -1,6 +1,10 @@
 # Protocol v0 (JSON / WebSocket)
 
-One room, at most 10 players. Same-origin endpoint: `/ws`.
+One room, at most 10 players. Default same-origin endpoint: `/ws`.
+For separate frontend/backend deployments, build the client with `VITE_WS_URL`
+(a full `wss://` URL including `/ws`) and configure the server's
+`WS_ALLOWED_ORIGINS` (comma-separated frontend hostnames, without scheme or path).
+Same-origin connections remain allowed. This origin check is not authentication.
 First message within 10 seconds: `{"type":"join","name":"Ana"}`.
 The server assigns an ID and color; names have up to 24 characters. No authentication.
 
