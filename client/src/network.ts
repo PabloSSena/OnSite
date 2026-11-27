@@ -86,7 +86,9 @@ export function connect(name: string, getAppearance?: () => Appearance): () => v
 
   function open() {
     useNetwork.setState({ status: attempt ? 'reconnecting' : 'connecting' })
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`)
+    const url = import.meta.env.VITE_WS_URL?.trim()
+      || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`
+    const ws = new WebSocket(url)
     socket = current = ws
     ws.onopen = () => {
       const appearance = parseAppearance(getAppearance ? getAppearance() : loadAppearance()) ?? loadAppearance()

@@ -172,8 +172,57 @@ docker compose down
 
 For friends on the same network: `http://HOST-IP:8081` (allow the port through your firewall).
 This prototype is for trusted environments: anyone who can reach the address can join.
-For internet access, configure HTTPS with Caddy and access control.
+For internet access, configure HTTPS with Nginx or Caddy and access control.
 A microphone is optional; voice starts only after choosing **Join voice**.
+
+## Vercel frontend and Lightsail backend
+
+The frontend can be hosted separately from the Go server. No new dependencies
+or WebSocket protocol changes are required.
+
+### Vercel
+
+- Root directory: `client`; framework: Vite.
+- Install command: `npm ci`; build command: `npm run build`; output: `dist`.
+- Set the Production environment variable
+  `VITE_WS_URL=wss://api.onsite.dev.br/ws`, then deploy again.
+- This URL is public configuration, not a secret. All `VITE_` variables are
+  embedded in the client bundle. Never put AWS credentials or secrets there.
+- When unset or blank, the client continues to connect to `/ws` on the page's
+  host, preserving local Vite and Docker setups.
+
+### Lightsail
+
+Keep the backend bound to localhost (currently `127.0.0.1:8081`) with Nginx
+terminating HTTPS on port 443 and forwarding WebSocket upgrades to Go.
+`https://api.onsite.dev.br/healthz` should return `ok` with a valid certificate.
+
+Rebuild the backend with these changes and configure its container environment:
+
+```env
+WS_ALLOWED_ORIGINS=onsite-plum.vercel.app
+```
+
+For `docker run`, pass `-e WS_ALLOWED_ORIGINS=onsite-plum.vercel.app`
+when recreating the container, preserving its existing port mapping, volumes,
+and other settings. An `export` in the SSH shell does not update a running
+container. If using this repository's Compose file, set the variable in the
+Compose environment or `.env` and recreate the server service.
+
+The allowlist uses comma-separated hostnames without `https://` or paths.
+For example, after adding a custom frontend domain:
+`WS_ALLOWED_ORIGINS=onsite-plum.vercel.app,office.onsite.dev.br`.
+Keep the list explicit; do not allow all Vercel preview domains with a wildcard.
+Same-origin clients remain supported when the variable is unset.
+Origin checks do not authenticate users; anyone with network access can still
+attempt to join using a non-browser client.
+
+After both deployments, open the frontend and check DevTools → Network → WS.
+The connection to `wss://api.onsite.dev.br/ws` should return `101 Switching
+Protocols`. Join from two tabs and check movement synchronization.
+Health checks alone do not verify WebSocket upgrades or origin validation.
+Voice and webcams use separate browser-to-browser WebRTC connections; this
+deployment does not add a TURN relay for restrictive networks.
 
 ## Webcams
 

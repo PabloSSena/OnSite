@@ -5,6 +5,7 @@ services:
     environment:
       ADDR: ":8081"
       DESKS_FILE: /data/desks.json
+      WS_ALLOWED_ORIGINS: "${WS_ALLOWED_ORIGINS:-}"
     volumes:
       - office-data:/data
     restart: unless-stopped
