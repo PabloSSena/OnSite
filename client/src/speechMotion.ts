@@ -16,3 +16,14 @@ export function advanceMouth(current: number, target: number, dt: number): numbe
   const next = current + (level - current) * blend
   return level === 0 && next < 0.005 ? 0 : next
 }
+
+// Dip from the normal floating height toward the body's crown, never above idle.
+// The 11 cm travel closes the neck gap while leaving room for the body bevel.
+export function speechHeadOffset(level: number, seconds: number, sip = 0): number {
+  const amplitude = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0
+  const drinking = Number.isFinite(sip) ? Math.min(1, Math.max(0, sip)) : 0
+  if (amplitude === 0 || drinking === 1) return 0
+  const phase = Number.isFinite(seconds) ? (seconds % (Math.PI * 2)) * 18 : 0
+  // Ease back to the reachable drinking pose while the bottle is at the mouth.
+  return -amplitude * 0.11 * (0.5 + 0.5 * Math.sin(phase)) * (1 - drinking)
+}

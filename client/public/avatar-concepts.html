@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Little people — avatar explorations</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #263c35; background: #f6f5f0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, canvas:focus-visible { outline: 3px solid #b57043; outline-offset: 4px; }
+    header, main, footer { max-width: 1240px; margin: auto; padding: 0 40px; }
+    header { padding-top: 30px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .brand { font-size: 13px; font-weight: 750; letter-spacing: -.3px; display: flex; gap: 10px; align-items: center; }
+    .brand-mark { width: 23px; height: 23px; background: #344e40; border-radius: 50% 50% 5px 5px; display: inline-block; }
+    .eyebrow, .status { font-size: 10px; text-transform: uppercase; letter-spacing: 1.8px; font-weight: 700; }
+    .status { border: 1px solid #dcded3; border-radius: 30px; padding: 9px 12px; color: #677466; }
+    .intro { padding: 58px 0 28px; display: flex; justify-content: space-between; gap: 35px; align-items: end; }
+    .eyebrow { color: #7a846f; margin: 0 0 15px; }
+    h1 { font-family: Georgia, serif; font-size: clamp(38px, 5vw, 60px); font-weight: 400; letter-spacing: -2.4px; margin: 0; line-height: 1.04; }
+    h1 em { color: #78876b; }
+    .description { font-size: 13px; line-height: 1.8; max-width: 330px; color: #718073; margin: 0 0 3px; }
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; margin: 10px 0 25px; padding: 17px 0; border-top: 1px solid #dddfd4; border-bottom: 1px solid #dddfd4; }
+    .control { display: flex; align-items: center; gap: 10px; }
+    .label { font-size: 11px; color: #728073; }
+    .segmented { background: #eaece4; display: flex; gap: 2px; padding: 3px; border-radius: 7px; }
+    .segmented button { border: 0; background: transparent; padding: 7px 11px; border-radius: 5px; color: #677565; font-size: 11px; }
+    .segmented button[aria-pressed="true"] { background: #fffef9; color: #2e4638; box-shadow: 0 1px 3px #23342212; }
+    .swatch { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #f6f5f0; outline: 1px solid transparent; padding: 0; }
+    .swatch[aria-pressed="true"] { outline-color: #425443; }
+    .check { display: flex; gap: 7px; align-items: center; font-size: 11px; color: #677565; cursor: pointer; }
+    input { accent-color: #526c51; }
+    .hint { margin-left: auto; font-size: 10px; color: #899080; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 19px; }
+    .card { background: #fffefb; border: 1px solid #e0e2d8; border-radius: 12px; overflow: hidden; transition: border-color .2s, box-shadow .2s; }
+    .card.selected { border-color: #526d4c; box-shadow: 0 0 0 2px #526d4c; }
+    .stage { height: 255px; background: var(--stage); position: relative; }
+    .number { position: absolute; left: 19px; top: 17px; color: #7c8979; font-size: 10px; letter-spacing: 1px; pointer-events: none; }
+    .tag { position: absolute; right: 15px; top: 13px; font-size: 9px; padding: 5px 7px; border: 1px solid #cad2bc; border-radius: 4px; color: #68795b; pointer-events: none; }
+    canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: pan-y; }
+    canvas:active { cursor: grabbing; }
+    .card-body { padding: 17px 19px 18px; }
+    .title-row { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.4px; }
+    .pick { background: transparent; border: 1px solid #d7ddce; color: #63705b; border-radius: 30px; padding: 6px 11px; font-size: 10px; white-space: nowrap; }
+    .pick[aria-pressed="true"] { background: #3e5944; color: white; border-color: #3e5944; }
+    .card p { font-size: 11px; color: #7a8375; line-height: 1.7; margin: 9px 0 13px; min-height: 37px; }
+    .spec { font-size: 9px; color: #89917f; letter-spacing: .8px; text-transform: uppercase; border-top: 1px solid #eceee4; padding-top: 11px; }
+    .decision { margin-top: 26px; background: #e9ede2; border-radius: 9px; padding: 19px 22px; display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+    .decision strong { font-size: 12px; font-weight: 600; }
+    .decision p { font-size: 11px; color: #71806a; margin: 5px 0 0; }
+    .decision span { font-size: 20px; color: #758868; }
+    footer { padding-top: 25px; padding-bottom: 28px; display: flex; justify-content: space-between; gap: 20px; font-size: 10px; color: #909787; }
+    @media (max-width: 950px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hint { display: none; } }
+    @media (max-width: 600px) { header, main, footer { padding-left: 20px; padding-right: 20px; } .intro { display: block; padding-top: 36px; } .description { margin-top: 20px; } .grid { grid-template-columns: 1fr; } .toolbar { gap: 13px; } .stage { height: 280px; } .status { font-size: 8px; } footer { flex-direction: column; } }
+  </style>
+</head>
+<body>
+  <header><div class="brand"><span class="brand-mark" aria-hidden="true"></span>office / character lab</div><span class="status">Design study · not in game</span></header>
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">03 / Following your reference</p><h1>Your shape.<br><em>Now with arms.</em></h1></div>
+      <p class="description">A small floating oval head. Two low-set dot eyes. A tall, softly rounded triangle and tiny block legs. Same character, six different arm treatments.</p>
+    </section>
+    <section class="toolbar" aria-label="Preview controls">
+      <div class="control"><span class="label">View</span><div class="segmented" id="views"><button data-angle="0" aria-pressed="true">Front</button><button data-angle="0.5" aria-pressed="false">¾</button><button data-angle="1.5707963267948966" aria-pressed="false">Side</button><button data-angle="3.141592653589793" aria-pressed="false">Back</button></div></div>
+      <div class="control"><span class="label">Motion</span><div class="segmented" id="motion"><button data-walk="false" aria-pressed="true">Still</button><button data-walk="true" aria-pressed="false">Walk</button></div></div>
+      <div class="control" id="colors" aria-label="Body color">
+        <span class="label">Color</span>
+        <button class="swatch" style="background:#84976c" data-color="#84976c" aria-label="Sage" aria-pressed="true"></button>
+        <button class="swatch" style="background:#d28e6f" data-color="#d28e6f" aria-label="Terracotta" aria-pressed="false"></button>
+        <button class="swatch" style="background:#7b9eb6" data-color="#7b9eb6" aria-label="Blue" aria-pressed="false"></button>
+        <button class="swatch" style="background:#b0a0bf" data-color="#b0a0bf" aria-label="Lilac" aria-pressed="false"></button>
+      </div>
+      <label class="check"><input id="face" type="checkbox" checked>Little face</label>
+      <span class="hint">↔ Drag any character to turn them all</span>
+    </section>
+    <section class="grid" id="grid" aria-label="Six avatar concepts"></section>
+    <section class="decision" aria-live="polite"><div><strong id="choice">Which one feels like you?</strong><p id="choice-note">Choose a favorite above, then tell me its number. Nothing in the game changes yet.</p></div><span aria-hidden="true">↗</span></section>
+  </main>
+  <footer><span>Reference study / Round three · 001–006</span><span>Floating head · Rounded triangle · Tiny block legs · Preview only</span></footer>
+  <script>
+    // Standalone, dependency-free orthographic mesh previews, not production avatars.
+    const referenceShape = { width: .88, height: .98, radius: .205, leg: .10, depth: .26 };
+    const concepts = [
+      { name: 'Simple little arms', description: 'The closest starting point: short, soft arms hanging alongside the rounded triangle. No extra details.', spec: 'Attached arms · rounded ends · no fingers', arm: 'rest', bg: '#edf0e5', tag: 'Closest to reference' },
+      { name: 'Tiny flippers', description: 'Very small arms angled outward. Keeps almost all the attention on the shape from your sketch.', spec: 'Extra-short arms · minimal silhouette', arm: 'short', bg: '#f2ebe2' },
+      { name: 'Little mittens', description: 'Slim sleeves with simple, thumb-shaped hands. A little more useful-looking for holding office objects.', spec: 'Slim sleeves · tiny mitten hands', arm: 'mittens', bg: '#f4eedc' },
+      { name: 'A little hello', description: 'The same character with one arm lifted. A pose study to show how a simple wave could feel.', spec: 'Attached arms · one waving hand', arm: 'wave', bg: '#efebf1' },
+      { name: 'Floating hands', description: 'A more abstract alternative: small hands separated from the body, echoing the floating head.', spec: 'Detached hands · no sleeves', arm: 'floating', bg: '#e9eef0' },
+      { name: 'Gentle bend', description: 'Small elbows with hands resting in front. A relaxed pose for carrying a mug or chatting.', spec: 'Bent arms · hands in front', arm: 'shy', bg: '#f2e8e5' },
+    ].map(c => ({ ...referenceShape, ...c }));
+    const grid = document.querySelector('#grid');
+    let angle = 0, walking = false, color = '#84976c', showFace = true;
+    const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    let dirty = true;
+    const previews = concepts.map((c, index) => {
+      const card = document.createElement('article');
+      card.className = 'card';
+      card.innerHTML = `<div class="stage" style="--stage:${c.bg}"><span class="number">0${index + 1}</span>${c.tag ? `<span class="tag">${c.tag}</span>` : ''}<canvas tabindex="0" aria-label="${c.name}: rotatable character preview. Use left and right arrow keys to rotate."></canvas></div><div class="card-body"><div class="title-row"><h2>${c.name}</h2><button class="pick" aria-pressed="false" aria-label="Choose ${c.name}">Choose this</button></div><p>${c.description}</p><div class="spec">${c.spec}</div></div>`;
+      grid.append(card);
+      const canvas = card.querySelector('canvas');
+      card.querySelector('.pick').addEventListener('click', () => {
+        document.querySelectorAll('.card').forEach(el => {
+          const chosen = el === card;
+          el.classList.toggle('selected', chosen);
+          el.querySelector('.pick').setAttribute('aria-pressed', String(chosen));
+          el.querySelector('.pick').textContent = chosen ? 'Selected ✓' : 'Choose this';
+        });
+        document.querySelector('#choice').textContent = `Your pick: 0${index + 1} / ${c.name}`;
+        document.querySelector('#choice-note').textContent = 'Tell me this number in chat, or mix details from different options. This selection stays on this page only.';
+      });
+      let drag = null;
+      canvas.addEventListener('pointerdown', e => { drag = e.clientX; canvas.setPointerCapture(e.pointerId); });
+      canvas.addEventListener('pointermove', e => {
+        if (drag === null) return;
+        angle += (e.clientX - drag) * .012;
+        drag = e.clientX;
+        clearViewButtons();
+        dirty = true;
+      });
+      const endDrag = () => { drag = null; };
+      canvas.addEventListener('pointerup', endDrag);
+      canvas.addEventListener('pointercancel', endDrag);
+      canvas.addEventListener('lostpointercapture', endDrag);
+      canvas.addEventListener('keydown', e => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+        e.preventDefault();
+        angle += e.key === 'ArrowLeft' ? -.15 : .15;
+        clearViewButtons();
+        dirty = true;
+      });
+      return { canvas, ctx: canvas.getContext('2d'), c };
+    });
+    function clearViewButtons() { document.querySelectorAll('#views button').forEach(b => b.setAttribute('aria-pressed', 'false')); }
+    function selectButton(container, button) {
+      container.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+      dirty = true;
+    }
+    document.querySelector('#views').addEventListener('click', e => {
+      if (!e.target.matches('button')) return;
+      angle = Number(e.target.dataset.angle);
+      selectButton(e.currentTarget, e.target);
+    });
+    document.querySelector('#motion').addEventListener('click', e => {
+      if (!e.target.matches('button')) return;
+      walking = e.target.dataset.walk === 'true';
+      selectButton(e.currentTarget, e.target);
+    });
+    document.querySelector('#colors').addEventListener('click', e => {
+      if (!e.target.matches('button')) return;
+      color = e.target.dataset.color;
+      selectButton(e.currentTarget, e.target);
+    });
+    document.querySelector('#face').addEventListener('change', e => { showFace = e.target.checked; dirty = true; });
+    const observer = new ResizeObserver(() => { dirty = true; });
+    previews.forEach(p => observer.observe(p.canvas));
+    reducedMotion.addEventListener('change', () => { dirty = true; });
+
+    function tint(hex, factor) {
+      const parts = hex.slice(1).match(/../g).map(n => Math.min(255, Math.round(parseInt(n, 16) * factor)));
+      return `rgb(${parts.join(',')})`;
+    }
+    function render({ canvas, ctx, c }, time) {
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+        canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+      }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      // Shared world scale makes the actual proportion differences easy to compare.
+      const scale = Math.min(w * .46, h * .47), ground = h * .855;
+      const tilt = .13, cs = Math.cos(angle), sn = Math.sin(angle);
+      function project([x, y, z]) {
+        const rx = x * cs + z * sn, rz = -x * sn + z * cs;
+        return [w / 2 + rx * scale, ground - (y * Math.cos(tilt) - rz * Math.sin(tilt)) * scale, rz];
+      }
+      ctx.fillStyle = '#53604412';
+      ctx.beginPath(); ctx.ellipse(w / 2, ground + 2, c.width * scale * .65, scale * .095, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#5360440b'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(w / 2, ground + 2, scale * .75, scale * .19, 0, 0, Math.PI * 2); ctx.stroke();
+      const phase = time * 7;
+      const moving = walking && !reducedMotion.matches;
+      const bob = moving ? Math.abs(Math.sin(phase)) * .025 : 0;
+      const base = c.leg + bob, top = base + c.height, headY = top + .13 + c.radius*1.12;
+      const faces = [];
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      function sphere(position, radius, oval = false) {
+        const p = project(position), r = radius * scale;
+        ctx.save();
+        ctx.translate(p[0],p[1]);
+        if (oval) ctx.rotate(-.23);
+        const gradient = ctx.createRadialGradient(-r*.35,-r*.45,r*.05,0,0,r*1.25);
+        gradient.addColorStop(0,'#f8f3e8'); gradient.addColorStop(.62,'#e9e3d5'); gradient.addColorStop(1,'#cec8b9');
+        ctx.fillStyle = gradient; ctx.beginPath(); ctx.ellipse(0,0,r,r*(oval ? 1.12 : 1),0,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+      function capsule(a, b, radius, fill) {
+        const start = project(a), end = project(b);
+        const gradient = ctx.createLinearGradient(start[0]-radius*scale,start[1],start[0]+radius*scale,end[1]+1);
+        gradient.addColorStop(0,tint(fill,1.12)); gradient.addColorStop(1,tint(fill,.9));
+        ctx.strokeStyle = gradient; ctx.lineWidth = radius * 2 * scale;
+        ctx.beginPath(); ctx.moveTo(start[0],start[1]); ctx.lineTo(end[0],end[1]); ctx.stroke();
+      }
+      function polygon(vertices, fill) {
+        faces.push({ points: vertices.map(project), fill, depth: vertices.reduce((sum, p) => sum + project(p)[2], 0) / vertices.length });
+      }
+      function box(x, y, z, width, height, depth) {
+        const v = [
+          [x-width/2,y,z-depth/2], [x+width/2,y,z-depth/2],
+          [x+width/2,y+height,z-depth/2], [x-width/2,y+height,z-depth/2],
+          [x-width/2,y,z+depth/2], [x+width/2,y,z+depth/2],
+          [x+width/2,y+height,z+depth/2], [x-width/2,y+height,z+depth/2],
+        ];
+        [[0,1,2,3],[5,4,7,6],[4,0,3,7],[1,5,6,2],[3,2,6,7],[4,5,1,0]].forEach((indices,i) =>
+          polygon(indices.map(j => v[j]), tint('#626555', [1.05,.94,.98,.9,1.12,.8][i])));
+      }
+      for (const side of [-1, 1]) {
+        const stride = moving ? Math.sin(phase + (side === 1 ? Math.PI : 0)) : 0;
+        box(side * c.width * .21, Math.max(0, stride) * .045, stride * .095, .12, c.leg + .025, .15);
+      }
+      // Extrude a curved triangle: rounded crown, gently bowed sides, wide lower edge.
+      const outline = [];
+      function curve(a,b,c1,d) {
+        for (let i=0;i<=18;i++) {
+          const t=i/18, u=1-t;
+          outline.push([a[0]*u*u*u+3*b[0]*u*u*t+3*c1[0]*u*t*t+d[0]*t*t*t,
+            a[1]*u*u*u+3*b[1]*u*u*t+3*c1[1]*u*t*t+d[1]*t*t*t]);
+        }
+      }
+      curve([0,1],[.22,1.03],[.40,.47],[.49,.045]);
+      curve([.49,.045],[.50,0],[.47,0],[.43,0]);
+      curve([.43,0],[.15,-.018],[-.15,-.018],[-.43,0]);
+      curve([-.43,0],[-.47,0],[-.50,0],[-.49,.045]);
+      curve([-.49,.045],[-.40,.47],[-.22,1.03],[0,1]);
+      const front = outline.map(([x,y]) => [x*c.width,base+y*c.height,c.depth/2]);
+      const back = outline.map(([x,y]) => [x*c.width,base+y*c.height,-c.depth/2]);
+      polygon(back,tint(color,.95));
+      polygon(front,tint(color,1.07));
+      for (let i=0;i<outline.length-1;i++) {
+        polygon([front[i],back[i],back[i+1],front[i+1]],tint(color,.93));
+      }
+      // Keep arms understated so the reference silhouette remains the focal point.
+      for (const side of [-1, 1]) {
+        const swing = moving ? Math.sin(phase + (side === 1 ? 0 : Math.PI)) * .12 : 0;
+        const shoulder = [side*c.width*.21, base+c.height*.64, 0];
+        let elbow = [side*(c.width*.48+.06), base+c.height*.47, .015+swing];
+        let hand = [side*(c.width*.57+.06), base+c.height*.31, .025+swing];
+        if (c.arm === 'wave' && side === -1) {
+          elbow = [-c.width*.52-.07,base+c.height*.78,swing];
+          hand = [-c.width*.53-.07,top-.02,swing];
+        }
+        if (c.arm === 'short') {
+          elbow = [side*c.width*.32,base+c.height*.54,.05+swing];
+          hand = [side*c.width*.49,base+c.height*.49,.06+swing];
+        }
+        if (c.arm === 'shy') {
+          elbow = [side*c.width*.43,base+c.height*.30,c.depth*.46];
+          hand = [side*.085,base+c.height*.34,c.depth*.5+.08+swing*.3];
+        }
+        const midpoint = elbow.map((n,i) => (n+hand[i])/2);
+        faces.push({
+          depth: (project(shoulder)[2]+project(elbow)[2]+project(hand)[2])/3,
+          draw: () => {
+            if (c.arm !== 'floating') {
+              capsule(shoulder,elbow,.038,color);
+              capsule(elbow,hand,.037,color);
+            }
+            if (c.arm === 'mittens' || c.arm === 'floating' || c.arm === 'shy') {
+              sphere(hand,.048);
+              if (c.arm === 'mittens') sphere([hand[0]-side*.028,hand[1]+.018,hand[2]+.01],.022);
+            }
+          },
+        });
+      }
+      faces.sort((a,b) => a.depth - b.depth);
+      faces.forEach(face => {
+        if (face.draw) { face.draw(); return; }
+        ctx.beginPath();
+        face.points.forEach((p,i) => i ? ctx.lineTo(p[0],p[1]) : ctx.moveTo(p[0],p[1]));
+        ctx.closePath(); ctx.fillStyle = face.fill; ctx.fill();
+        ctx.strokeStyle = face.fill; ctx.lineWidth = .6; ctx.stroke();
+      });
+      sphere([0,headY,0],c.radius,true);
+      if (showFace) {
+        // Features sit on the front hemisphere and disappear naturally around the back.
+        const eyeY = -c.radius*.34, eyeX = c.radius*.29;
+        const features = [[-eyeX,eyeY],[eyeX,eyeY]];
+        function surface(x,y) {
+          const z = Math.sqrt(Math.max(0,c.radius*c.radius-x*x-y*y));
+          const lean = .23, yy = y*1.12;
+          return { p: project([x*Math.cos(lean)-yy*Math.sin(lean),headY+x*Math.sin(lean)+yy*Math.cos(lean),z]), visibility: ((-x*sn+z*cs)*Math.cos(tilt)+y*Math.sin(tilt))/c.radius };
+        }
+        features.forEach(([x,y]) => {
+          const {p,visibility} = surface(x,y);
+          if (visibility <= .04) return;
+          ctx.fillStyle = '#423d38';
+          const eyeRadius = c.radius * .10 * scale;
+          ctx.beginPath();
+          ctx.ellipse(p[0],p[1],eyeRadius*visibility,eyeRadius*1.25,0,0,Math.PI*2);
+          ctx.fill();
+        });
+      }
+    }
+    let visible = true;
+    document.addEventListener('visibilitychange', () => { visible = !document.hidden; dirty = true; });
+    function frame(t) {
+      if (visible && (dirty || (walking && !reducedMotion.matches))) {
+        previews.forEach(p => render(p,t/1000));
+        dirty = false;
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

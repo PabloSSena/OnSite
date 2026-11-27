@@ -57,8 +57,8 @@ export function defaultAppearance(color?: string): Appearance {
     top: 'tee', bottom: 'trousers', shoes: 'boots',
     topColor: clothingColor(color) ? color! : '#52d6b1',
     bottomColor: '#25333e', shoeColor: '#b58453', skin: '#efc9a9',
-    hair: 'short', hairColor: '#a65d45', hat: 'none', hatColor: '#25333e',
-    backpack: true, backpackColor: '#b58453', face: 'smile',
+    hair: 'none', hairColor: '#a65d45', hat: 'none', hatColor: '#25333e',
+    backpack: false, backpackColor: '#b58453', face: 'neutral',
   }
 }
 

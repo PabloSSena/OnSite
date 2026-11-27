@@ -1,7 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { Group, PlaneGeometry } from 'three'
+import { Color, Group, PlaneGeometry } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { MIRROR_GIF_LAYER } from './MirrorGIFs'
+
+// Reflector's overlay blend is neutral at 0.5 in linear space. Hex 0x808080
+// is sRGB gray (~0.216 linear), which darkens reflected skin and clothing.
+export const MIRROR_COLOR = new Color().setRGB(0.5, 0.5, 0.5)
 
 export default function WallMirror() {
   const surface = useRef<Group>(null)
@@ -13,7 +17,7 @@ export default function WallMirror() {
     // PlaneGeometry lies in XY with its normal facing +Z, into the room.
     const geometry = new PlaneGeometry(3.2, 2.6)
     const mirror = new Reflector(geometry, {
-      color: 0x808080,
+      color: MIRROR_COLOR,
       textureWidth: 1024,
       textureHeight: 512,
       clipBias: 0.003,

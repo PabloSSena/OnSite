@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { advanceMouth, speechLevel } from '../src/speechMotion'
+import { advanceMouth, speechHeadOffset, speechLevel } from '../src/speechMotion'
 
 test('speech level gates silence and low noise and stays finite and bounded', () => {
   expect(speechLevel(new Float32Array())).toBe(0)
@@ -8,6 +8,29 @@ test('speech level gates silence and low noise and stays finite and bounded', ()
   expect(speechLevel(new Float32Array(512).fill(0.075))).toBeCloseTo(0.5)
   expect(speechLevel(new Float32Array([1, -1]))).toBe(1)
   expect(speechLevel(new Float32Array([NaN]))).toBe(0)
+})
+
+test('speech dips toward the neck, never above the normal head position, and rests in silence', () => {
+  const heights: number[] = []
+  for (let i = 0; i < 120; i++) {
+    const time = i / 60
+    const height = speechHeadOffset(1, time)
+    heights.push(height)
+    expect(height).toBeGreaterThanOrEqual(-0.11)
+    expect(height).toBeLessThanOrEqual(0)
+    expect(speechHeadOffset(0, time)).toBe(0)
+    expect(speechHeadOffset(0.5, time)).toBeCloseTo(height / 2, 12)
+    expect(speechHeadOffset(1, time, 1)).toBe(0)
+    expect(speechHeadOffset(1, time, 0.5)).toBeCloseTo(height / 2, 12)
+  }
+  expect(Math.max(...heights) - Math.min(...heights)).toBeGreaterThan(0.10)
+  let volume = 1
+  for (let i = 0; i < 120; i++) volume = advanceMouth(volume, 0, 1 / 60)
+  expect(speechHeadOffset(volume, 2)).toBe(0)
+  expect(speechHeadOffset(NaN, 0)).toBe(0)
+  expect(Number.isFinite(speechHeadOffset(Infinity, Infinity, NaN))).toBe(true)
+  expect(speechHeadOffset(1, Math.PI / 36)).toBeCloseTo(-0.11)
+  expect(speechHeadOffset(1, Math.PI / 12)).toBeCloseTo(0)
 })
 
 test('mouth follows volume smoothly, closes when silent, and is frame-rate independent', () => {

@@ -16,7 +16,7 @@ test('fridge reach, actions, and collision', () => {
     .toEqual(['Open fridge', 'Take a beer', 'Close fridge'])
 })
 
-type Seen = { x: number; z: number; holding?: string; drink?: number }
+type Seen = { x: number; z: number; holding?: string; drink?: number; appearance?: { hat: string } }
 
 async function join(page: Page, name: string) {
   const state = { me: { x: 0, z: 6 } as Seen, players: {} as Record<string, Seen>,
@@ -32,6 +32,7 @@ async function join(page: Page, name: string) {
     if (state.players[name]) state.me = state.players[name]
   }))
   await page.goto('/')
+  if (name === 'Fridge raider') await page.getByLabel('Hat', { exact: true }).selectOption('engineer')
   await page.getByLabel('What should we call you?').fill(name)
   await page.getByRole('button', { name: 'Join the office' }).click()
   await expect(page.locator('.presence')).toContainText('Live')
@@ -72,20 +73,30 @@ test('open the fridge, grab a beer, sip, and drop it, seen by a friend', async (
   await expect(prompt).toContainText('Sip')
   await expect(prompt).toContainText('Close fridge')
   await expect.poll(() => theirs.players['Fridge raider']?.holding).toBe('beer')
+  expect(theirs.players['Fridge raider']?.appearance?.hat).toBe('engineer')
   await page.screenshot({ path: 'test-results/fridge-beer.png' })
   // First person is the priority: check the open fridge and the bottle in hand from your own eyes.
   await openMenu(page)
   await firstPerson.click()
   await expect(firstPerson).toHaveAttribute('aria-pressed', 'true')
+  await closeMenu(page)
+  await page.locator('canvas').click({ position: { x: 500, y: 300 } })
+  await expect.poll(() => page.evaluate(() => document.pointerLockElement?.tagName)).toBe('CANVAS')
   await page.screenshot({ path: 'test-results/fridge-first-person.png' })
+  await press('KeyR')
+  // Retain transient observations: a slow automation round trip can outlast the sip.
+  await expect.poll(() => theirs.sips.includes('Fridge raider'), { timeout: 15000 }).toBe(true)
+  expect(theirs.players['Fridge raider']?.appearance?.hat).toBe('engineer')
+  await page.keyboard.press('Escape')
+  await openMenu(page)
   await firstPerson.click()
   await expect(firstPerson).toHaveAttribute('aria-pressed', 'false')
   await closeMenu(page)
-  await page.locator('canvas').click({ position: { x: 500, y: 300 } })
-
-  await press('KeyR')
-  // Retain transient observations: a slow automation round trip can outlast the sip.
-  await expect.poll(() => theirs.sips.includes('Fridge raider')).toBe(true)
+  // Explicitly return keyboard focus to the scene, not a camera-mode button.
+  await page.locator('canvas').evaluate(canvas => {
+    canvas.tabIndex = -1
+    canvas.focus()
+  })
   await press('KeyG')
   await expect.poll(() => theirs.players['Fridge raider']?.holding).toBe('none')
   await expect(prompt).not.toContainText('Sip')
